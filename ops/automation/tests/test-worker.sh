@@ -67,11 +67,15 @@ rm -f "${PAUSE_FLAG}"
 # ── end-to-end in a throwaway clone (no remote; stub claude) ──
 clone="${tmp}/clone"
 git clone -q "${repo}" "${clone}"
+# The worker's base is `main`; make the clone's checked-out commit be `main`
+# whichever branch the suite is run from.
+git -C "${clone}" checkout -q -B main
 git -C "${clone}" config user.name "Graft Test"; git -C "${clone}" config user.email test@example.invalid
 git -C "${clone}" config core.hooksPath ops/automation/githooks
 (cd "${clone}" && flock "${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent) || fail "clone install"
 mkstub() { # mkstub <name> <body>
-  printf '#!/usr/bin/env bash\n%s\n' "$2" > "${tmp}/$1"; chmod +x "${tmp}/$1"
+  # Every stub answers the auth preflight as logged in, then runs its body.
+  printf '#!/usr/bin/env bash\nif [ "$1" = auth ]; then echo "{\\"loggedIn\\": true}"; exit 0; fi\n%s\n' "$2" > "${tmp}/$1"; chmod +x "${tmp}/$1"
 }
 e2e_backlog() { # e2e_backlog <dod-cmd>
   cat > "${clone}/BACKLOG.md" <<B
@@ -123,6 +127,24 @@ check "e2e cap: each attempt times out" test "$(grep -c 'event=timeout' "${tmp}/
 check "e2e cap: stops at iteration cap with clean exit" grep -qE 'status=blocked reason=iteration-cap attempts=2 exit=0' "${tmp}/e2e-cap/runs.log"
 check "e2e cap: blocked status + reason on branch" bash -c "git -C '${clone}' show auto/E-01:BACKLOG.md | grep -A2 'E-01 ·' | grep -q 'status: blocked'"
 check "e2e cap: PROGRESS note on branch" bash -c "git -C '${clone}' show auto/E-01:PROGRESS.md | grep -q 'E-01 is BLOCKED'"
+git -C "${clone}" branch -q -D auto/E-01
+
+# (d) infra error: the session fails fast (e.g. not logged in) → claim released,
+#     item untouched, non-zero exit — never a fake iteration-cap hit
+mkstub claude-broken 'echo "Not logged in" >&2; exit 1'
+e2e_backlog 'false'
+rc=0; CLAUDE_BIN="${tmp}/claude-broken" WORKER_MAX_ATTEMPTS=3 run_e2e infra >/dev/null 2>&1 || rc=$?
+check "e2e infra: worker exits non-zero" test "${rc}" != 0
+check "e2e infra: logged as infra-error with claim released" grep -qE 'event=end status=infra-error .*claim=released exit=1' "${tmp}/e2e-infra/runs.log"
+check "e2e infra: stops after the first failed session" test "$(grep -c 'event=attempt' "${tmp}/e2e-infra/runs.log")" = 1
+check "e2e infra: claim branch deleted" bash -c "! git -C '${clone}' rev-parse -q --verify auto/E-01 >/dev/null"
+
+# (e) auth preflight: a logged-out CLI claims nothing
+printf '#!/usr/bin/env bash\nif [ "$1" = auth ]; then echo "{\\"loggedIn\\": false}"; exit 0; fi\ntouch %s/should-not-run\n' "${tmp}" > "${tmp}/claude-loggedout"; chmod +x "${tmp}/claude-loggedout"
+rc=0; CLAUDE_BIN="${tmp}/claude-loggedout" run_e2e auth >/dev/null 2>&1 || rc=$?
+check "e2e auth: logged-out preflight exits non-zero" test "${rc}" != 0
+check "e2e auth: logged as claude-not-logged-in" grep -q 'event=infra-error reason=claude-not-logged-in' "${tmp}/e2e-auth/runs.log"
+check "e2e auth: no branch, session never invoked" bash -c "! git -C '${clone}' rev-parse -q --verify auto/E-01 >/dev/null && [ ! -e '${tmp}/should-not-run' ]"
 
 echo
 if (( fails > 0 )); then echo "${fails} check(s) failed"; exit 1; fi

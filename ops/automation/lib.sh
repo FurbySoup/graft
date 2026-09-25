@@ -183,3 +183,10 @@ run_with_timeout() {
   local secs="$1"; shift
   timeout --kill-after=30 "${secs}" "$@"
 }
+
+# claude_logged_in <claude-bin>: exit 0 only if the CLI reports an authenticated
+# session. The worker and reviewer refuse to run otherwise (observed 2026-09-25: an
+# unauthenticated CLI fails every attempt in ~2 s and would masquerade as a cap hit).
+claude_logged_in() {
+  "$1" auth status 2>/dev/null | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("loggedIn") else 1)' 2>/dev/null
+}

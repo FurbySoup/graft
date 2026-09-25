@@ -136,6 +136,12 @@ main() {
   phase="$(item_field "${backlog_snapshot}" "${item}" phase)"
   block="$(item_block "${backlog_snapshot}" "${item}")"
   if [[ "${dry_run}" == 1 ]]; then echo "${item}"; return 0; fi
+  if ! claude_logged_in "${CLAUDE_BIN}"; then
+    log_event "${RUN_ID}" - infra-error reason=claude-not-logged-in exit=1
+    echo "claude CLI is not logged in (run: claude auth login); nothing claimed" >&2
+    return 1
+  fi
+
   if [[ -z "${dod}" ]]; then
     log_event "${RUN_ID}" "${item}" skipped reason=no-dod-cmd
     echo "item ${item} has no dod-cmd; the worker only runs machine-checkable items"; return 0
@@ -166,6 +172,11 @@ main() {
     run_claude "${wt}" "${prompt_file}" "${transcript}" || rc=$?
     log_event "${RUN_ID}" "${item}" attempt n="${attempt}" claude_exit="${rc}"
     [[ "${rc}" == 124 || "${rc}" == 137 ]] && log_event "${RUN_ID}" "${item}" timeout n="${attempt}" secs="${CLAUDE_TIMEOUT}"
+    if [[ "${rc}" != 0 && "${rc}" != 124 && "${rc}" != 137 ]]; then
+      # The session itself failed (auth, CLI crash, API outage) — that says nothing
+      # about the item. Release the claim entirely and leave the item open.
+      outcome="infra-error"; break
+    fi
 
     mapfile -t touched < <(changed_paths "${wt}" "${claim_sha}")
     local violations
@@ -189,6 +200,15 @@ $(tail -n 60 "${verify_out}")
 Fix the cause. Do not weaken tests or checks."
   done
   [[ -z "${outcome}" ]] && outcome="iteration-cap"
+
+  if [[ "${outcome}" == "infra-error" ]]; then
+    cleanup_worktree "${wt}"
+    git -C "${REPO_ROOT}" branch -q -D "${branch}" 2>/dev/null || true
+    has_remote && git -C "${REPO_ROOT}" push --quiet "${REMOTE}" --delete "${branch}" 2>/dev/null || true
+    log_event "${RUN_ID}" "${item}" end status=infra-error claude_exit="${rc}" attempts="${attempt}" claim=released exit=1
+    echo "infra-error: headless session failed (exit ${rc}); claim on ${item} released" >&2
+    return 1
+  fi
 
   if [[ "${outcome}" == "green" ]]; then
     # Commit anything the session left uncommitted (the pre-commit hook re-gates it).
