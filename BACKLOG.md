@@ -376,6 +376,16 @@ commit and marks the item `blocked`.
 
 ## Before P3 entry
 
+### D-02 · Re-evaluate public repo visibility before personal-productivity tasks
+- status: open
+- phase: pre-P3
+- executor: human
+- owner-only: yes
+- depends: —
+- trigger: before any backlog item, canary, skill or episode fixture draws on Mark's personal productivity work (including if D-01 picks such a second domain) — whichever comes first
+- note: the repo went public 2026-09-25 (Phase 0.5) so branch protection works on the Free plan. That was chosen while all content is synthetic katas and project docs. Personal task content, ledger exports or episode fixtures change that trade-off.
+- dod: `docs/decisions/ADR-*-repo-visibility.md` exists with `Status: Accepted`, and it records the decision (stay public / go private / split private data repo) with the branch-protection consequence stated. AND `gh repo view FurbySoup/graft --json visibility --jq .visibility` matches the ADR.
+
 ### D-01 · Choose the second (judge) domain
 - status: open
 - phase: pre-P3
