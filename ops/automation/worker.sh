@@ -298,8 +298,6 @@ Fix the cause. Do not weaken tests or checks."
         echo '```'
         printf '%s\n' "${block}"
         echo '```'
-        echo
-        echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
       } > "${body}"
       local pr_url
       pr_url="$("${GH_BIN}" pr create --base "${BASE}" --head "${branch}" \
