@@ -1,0 +1,27 @@
+# Durable runtime data (ledger, calibration, dash output, dsh sessions, smoke output)
+data/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# dsh home: config (profiles, patches) is committed; state and secrets are not
+ops/dsh/home/.credentials.yaml
+ops/dsh/home/.anonymous-user-id
+ops/dsh/home/settings.yaml
+ops/dsh/home/sessions/
+ops/dsh/home/cache/
+ops/dsh/home/profiles/*/node_modules/
+.env
+.env.*
+
+# Automation state
+ops/automation/pause
