@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/plugins/graft-trust" },
+    { "path": "packages/plugins/graft-judge" },
+    { "path": "packages/plugins/graft-ledger" }
+  ]
+}
