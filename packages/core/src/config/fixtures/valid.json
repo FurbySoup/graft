@@ -1,0 +1,7 @@
+{
+  "ollamaEndpoint": "http://localhost:11434",
+  "doerModel": "graft-doer:8k",
+  "judgeModel": "phi4-mini",
+  "iterationCap": 5,
+  "skillsEnabled": true
+}
