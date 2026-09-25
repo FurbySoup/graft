@@ -127,6 +127,7 @@ check "e2e cap: each attempt times out" test "$(grep -c 'event=timeout' "${tmp}/
 check "e2e cap: stops at iteration cap with clean exit" grep -qE 'status=blocked reason=iteration-cap attempts=2 exit=0' "${tmp}/e2e-cap/runs.log"
 check "e2e cap: blocked status + reason on branch" bash -c "git -C '${clone}' show auto/E-01:BACKLOG.md | grep -A2 'E-01 ·' | grep -q 'status: blocked'"
 check "e2e cap: PROGRESS note on branch" bash -c "git -C '${clone}' show auto/E-01:PROGRESS.md | grep -q 'E-01 is BLOCKED'"
+git -C "${clone}" branch -q -D auto/E-01
 
 # (d) infra error: the session fails fast (e.g. not logged in) → claim released,
 #     item untouched, non-zero exit — never a fake iteration-cap hit
