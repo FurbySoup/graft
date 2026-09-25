@@ -1,0 +1,9 @@
+%% Mirror of the dev-loop diagram inlined in README.md (README is canonical).
+flowchart LR
+  A["BACKLOG.md item"] --> W["Worker: claude -p, cap 5"]
+  W --> G{"gate.sh green and DoD met?"}
+  G -->|"red, retry"| W
+  G -->|yes| P["Pull request"]
+  P --> R["Fresh-context review"]
+  R --> H["Human merge"]
+  G -->|"cap hit"| K["Blocked, no PR"]
