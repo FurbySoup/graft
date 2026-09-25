@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graft-calibrate"
+version = "0.0.0"
+description = "Graft offline sidecar: judge/router calibration (graft-calibrate) and the deterministic statistics engine (graft-stats)."
+requires-python = ">=3.14"
+# Zero third-party dependencies in Phase 0. numpy/scipy will be added only after
+# Mark approves PyPI network access (tracked in BACKLOG.md). Until then, do not
+# `pip install -e .` — tests run from source:
+#   sidecars/calibrate/.venv/bin/python -m unittest discover -s sidecars/calibrate/tests -t sidecars/calibrate
+dependencies = []
+
+[tool.setuptools]
+packages = ["graft_calibrate"]
