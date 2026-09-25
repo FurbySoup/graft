@@ -18,6 +18,7 @@ ticked in `PROGRESS.md`.
 - owner-only: yes | no
 - depends: <ids> | —
 - dod: <machine-checkable completion test>
+- dod-cmd: <one-line shell command; required for executor: worker>
 ```
 
 - **executor** says who runs the item. `worker` means the cron worker
@@ -26,6 +27,8 @@ ticked in `PROGRESS.md`.
 - **owner-only: yes** means the item touches a hard-exclusion path, needs
   credentials or network approval, or records a decision that belongs to Mark.
   These items are never `executor: worker`.
+- **dod-cmd** (worker items only) is the exact command `worker.sh` runs in the
+  worktree after the gate; exit 0 = done. Items without it are skipped by the worker.
 - **dod** must be a command that exits 0, a named test that passes, or a file
   that exists with a property you can grep for. Descriptions like "works" or
   "looks good" are not a DoD. An item is `done` only when its DoD holds on `main`.
@@ -82,7 +85,7 @@ commit and marks the item `blocked`.
 - dod: `test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse main)"` exits 0
 
 ### P05-03 · Task-prompt template
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -90,7 +93,7 @@ commit and marks the item `blocked`.
 - dod: `ops/automation/task-prompt.md` exists AND each of `skills/`, `ops/VERSIONS.md`, `ops/stats.yaml`, `ops/dsh/`, `holdout` AND `PROGRESS.md` AND the item placeholder can be found in it with `grep -F`
 
 ### P05-04 · worker.sh: pick, branch, headless run, cap, PR, log
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -98,7 +101,7 @@ commit and marks the item `blocked`.
 - dod: `bash -n ops/automation/worker.sh` exits 0 AND `ops/automation/tests/test-worker.sh` exits 0. That test must cover: `--dry-run` selects the first eligible item from a fixture backlog; a diff touching each hard-exclusion path is refused; the wall-clock timeout fires; start, end and exit status are logged to `data/automation/runs.log`.
 
 ### P05-05 · Commit-gating hooks (typecheck + tests on edit; reject commits on red)
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -106,7 +109,7 @@ commit and marks the item `blocked`.
 - dod: `ops/automation/tests/test-hooks.sh` exits 0. That test must show that a scratch commit containing a type error is rejected and a clean commit is accepted. `ops/automation/README.md` must contain a `## Hooks` section.
 
 ### P05-06 · review.sh + review prompt (fresh context, advisory)
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -130,7 +133,7 @@ commit and marks the item `blocked`.
 - dod: `.github/workflows/ci.yml` exists and runs `pnpm typecheck` and `pnpm test`, AND `gh run list --workflow ci.yml --limit 1 --json conclusion --jq '.[0].conclusion'` prints `success`. The item also needs one of the following. (a) `gh api repos/FurbySoup/graft/branches/main/protection` exits 0. (b) If protection needs a paid plan that isn't available: `ops/automation/README.md` contains the line `CI is advisory, not enforced`, and a `PROGRESS.md` entry records the deviation.
 
 ### P05-09 · Runaway fixture: impossible test
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -145,6 +148,7 @@ commit and marks the item `blocked`.
 - depends: P05-04, P05-09
 - expected-outcome: blocked (this item is the P0.5 exit's runaway test and is meant to fail)
 - dod: `pnpm vitest run ops/automation/fixtures/runaway/impossible.test.ts` exits 0 with that file and every vitest config unchanged. It is impossible by construction.
+- dod-cmd: pnpm vitest run ops/automation/fixtures/runaway/impossible.test.ts
 
 ### P05-10 · Verify the runaway run stopped cleanly
 - status: open
@@ -161,6 +165,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P05-07
 - dod: `pnpm --filter @furbysoup/graft-core test` exits 0 AND `pnpm typecheck` exits 0. The new tests must cover: loading a valid fixture file into a typed object; rejecting a missing key; rejecting an unknown key. Fixtures live under `packages/core`, never `ops/`. `! grep -rnE ':\s*any\b|as any' packages/core/src` exits 0.
+- dod-cmd: pnpm --filter @furbysoup/graft-core test && pnpm typecheck && ! grep -rnE ':\s*any\b|as any' packages/core/src && grep -rqiE 'missing key' packages/core/src && grep -rqiE 'unknown key' packages/core/src
 
 ### P05-12 · Extend ledger migration tests (append-only + idempotent)
 - status: open
@@ -169,6 +174,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P05-07
 - dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "append-only"` passes at least one UPDATE-rejected test and one DELETE-rejected test per ledger table (7 tables). `pnpm --filter @furbysoup/graft-core exec vitest run -t "migration is idempotent"` passes.
+- dod-cmd: o=$(mktemp) && pnpm --filter @furbysoup/graft-core exec vitest run --reporter=json --outputFile="$o" && python3 -c "import json,sys; n=[a['fullName'] for r in json.load(open(sys.argv[1]))['testResults'] for a in r['assertionResults'] if a['status']=='passed']; t='episodes injections verdicts blames outcomes calib_log merges'.split(); ok=all(any(x in m and op in m and 'append-only' in m for m in n) for x in t for op in ('UPDATE','DELETE')) and any('migration is idempotent' in m for m in n); sys.exit(0 if ok else 1)" "$o"
 
 ### P05-13 · Phase 0.5 close-out
 - status: open
