@@ -148,7 +148,7 @@ main() {
   trap 'cleanup_worktree "'"${wt}"'"' EXIT
 
   # Claim: status → claimed on the branch; pushing the branch is the lock.
-  ( cd "${wt}" && pnpm install --frozen-lockfile --offline --reporter=silent )
+  ( cd "${wt}" && mkdir -p "${XDG_CACHE_HOME:-${HOME}/.cache}" && flock "${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent )
   set_item_status "${wt}/BACKLOG.md" "${item}" claimed "claimed-by: ${RUN_ID}"
   git -C "${wt}" add BACKLOG.md
   git -C "${wt}" commit --quiet -m "chore(backlog): claim ${item} (${RUN_ID})"

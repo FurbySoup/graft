@@ -14,7 +14,7 @@ clone="${tmp}/clone"
 git clone -q "${repo}" "${clone}"
 git -C "${clone}" config user.name "Graft Test"; git -C "${clone}" config user.email test@example.invalid
 "${clone}/ops/automation/install-hooks.sh" >/dev/null
-(cd "${clone}" && pnpm install --frozen-lockfile --offline --reporter=silent) || fail "clone install"
+(cd "${clone}" && flock "${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent) || fail "clone install"
 
 [[ "$(git -C "${clone}" config core.hooksPath)" == "ops/automation/githooks" ]] && ok "install-hooks sets core.hooksPath" || fail "install-hooks sets core.hooksPath"
 

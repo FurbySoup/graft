@@ -7,7 +7,11 @@ export PATH="${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 root="$(git rev-parse --show-toplevel)"
 cd "${root}"
 if [[ "${1:-}" == "--install" ]]; then
-  pnpm install --frozen-lockfile --offline --reporter=silent
+  # Concurrent offline installs race on the shared pnpm store (observed: worker and
+  # reviewer overlapping). Serialise them machine-wide.
+  lock="${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock"
+  mkdir -p "$(dirname "${lock}")"
+  flock "${lock}" pnpm install --frozen-lockfile --offline --reporter=silent
 fi
 pnpm typecheck
 pnpm lint

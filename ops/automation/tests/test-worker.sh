@@ -69,7 +69,7 @@ clone="${tmp}/clone"
 git clone -q "${repo}" "${clone}"
 git -C "${clone}" config user.name "Graft Test"; git -C "${clone}" config user.email test@example.invalid
 git -C "${clone}" config core.hooksPath ops/automation/githooks
-(cd "${clone}" && pnpm install --frozen-lockfile --offline --reporter=silent) || fail "clone install"
+(cd "${clone}" && flock "${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent) || fail "clone install"
 mkstub() { # mkstub <name> <body>
   printf '#!/usr/bin/env bash\n%s\n' "$2" > "${tmp}/$1"; chmod +x "${tmp}/$1"
 }
