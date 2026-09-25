@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Graft's only sanctioned way to invoke dsh.
+# - DSH_HOME is the committed config home under ops/ (state/secrets there are gitignored).
+# - Telemetry is disabled at the process level (dsh-base defaults to FEEDBACK_ONLY
+#   OTel upload to harness-telemetry.deepseeksvc.com; see ops/VERSIONS.md).
+# - The dsh binary is the workspace-pinned one, never a global install.
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export DSH_HOME="${repo_root}/ops/dsh/home"
+export DSH_TELEMETRY_DISABLED=1
+export DSH_TELEMETRY_MODE=DISABLED
+export GRAFT_REPO_ROOT="${repo_root}"
+# Placeholder for the keyless localhost Ollama route (pi-ai refuses routes with no key).
+# Not a secret: Ollama on localhost performs no authentication.
+export GRAFT_OLLAMA_KEY=ollama-localhost-no-auth
+exec "${repo_root}/node_modules/.bin/dsh" "$@"

@@ -1,0 +1,11 @@
+{
+  "name": "dsh-profile-graft-replay",
+  "private": true,
+  "dependencies": {},
+  "dsh": {
+    "profile": {
+      "bundles": [],
+      "patchReload": "startup"
+    }
+  }
+}

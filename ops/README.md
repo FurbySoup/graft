@@ -6,6 +6,7 @@
 | `stats.yaml` | Pre-registered statistics config (SPEC §4.3); standalone human-merged commits only | human (hard exclusion) |
 | `dsh/home/` | `DSH_HOME` for every Graft dsh run. Profiles committed; state/secrets gitignored | human (dsh config) |
 | `presets/graft-replay/` | Frozen replay profile — never drifts (see its README) | human (dsh config) |
+| `models/graft-doer.Modelfile` | Doer = `qwen3:8b` with `num_ctx 8192` pinned (the largest fully GPU-resident context) | human (model pin) |
 | `scripts/dsh` | The only sanctioned dsh entry point (sets `DSH_HOME`, disables telemetry) | human (dsh config) |
 | `automation/` | Phase 0.5 worker loop (not yet built) | — |
 

@@ -1,0 +1,198 @@
+# graft-replay — the FROZEN replay profile (SPEC §2, §3.5 step 4). Never drifts:
+# see README.md in this directory for the rule and the drift check.
+#
+# Structure: package.json lists NO bundles, so nothing outside this file composes
+# into the tree. Part 1 is the @deepseek-ai/dsh-sdk-minimal@0.1.5-rc.3 default tree,
+# inlined VERBATIM from `dsh --profile sdk-minimal --dump-default-config`. Part 2 is
+# Graft's deltas, each id-targeted so the diff against upstream stays legible.
+
+# ── Part 1: upstream dsh-sdk-minimal@0.1.5-rc.3 tree, verbatim ─────────────────
+- insert:
+    - id: sdk-app-startup
+      name: '@deepseek-ai/dsh-sdk-app'
+      config:
+        profile: sdk-minimal
+    - id: sdk-jsonrpc-server
+      name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+      inject:
+        - sdkAppStartup
+        - loader
+      config:
+        maxTokensAsSuccess: false
+    - id: deepseek-llm-api-extensions
+      name: '@deepseek-ai/dsh-deepseek-llm-api-extensions'
+    - id: session-log-deepseek
+      name: '@deepseek-ai/dsh-session-log-deepseek'
+    - id: plugin-package-inventory-deepseek
+      name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
+    - id: llm-deepseek
+      name: '@deepseek-ai/dsh-llm-deepseek'
+      config:
+        apiKeyEnv: DEEPSEEK_API_KEY
+        defaultContextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 1000000)
+        streamIdleTimeoutMs: 172800000
+    - id: sandbox
+      name: '@deepseek-ai/dsh-sandbox-local'
+    - id: session-projection
+      name: '@deepseek-ai/dsh-session-projection'
+    - id: sandbox-policy
+      name: '@deepseek-ai/dsh-sandbox-policy'
+      config:
+        mode: danger-full-access
+        workspaceRoot: !!js process.cwd()
+    - id: subprocess
+      name: '@deepseek-ai/dsh-subprocess-local'
+    - id: pty
+      name: '@deepseek-ai/dsh-terminal'
+    - id: terminal-bash
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform === 'win32'
+      config:
+        timeoutMs: 300000
+    - id: terminal-pwsh
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        shellDialect: pwsh
+        timeoutMs: 300000
+    - id: timer
+      name: '@deepseek-ai/cordis-plugin-timer'
+    - id: llm
+      name: '@deepseek-ai/dsh-llm'
+    - id: session
+      name: '@deepseek-ai/dsh-session'
+    - id: session-title
+      name: '@deepseek-ai/dsh-session-title'
+      config:
+        fallbackMaxWords: 5
+        fallbackMaxBytes: 40
+        maxTitleBytes: 80
+    - id: system-prompt
+      name: '@deepseek-ai/dsh-system-prompt'
+      config:
+        includeHarnessIdentity: false
+        includeRuntimeContext: false
+        personaPrefix: !!js >-
+          process.env.DSH_SYSTEM_PROMPT ?? 'You are a helpful software engineer
+          assistant.'
+    - id: tools
+      name: '@deepseek-ai/dsh-tools'
+    - id: agent
+      name: '@deepseek-ai/dsh-agent'
+    - id: llm-retry
+      name: '@deepseek-ai/dsh-llm-retry'
+    - id: jobs
+      name: '@deepseek-ai/dsh-jobs-local'
+    - id: invariants
+      name: '@deepseek-ai/dsh-invariants'
+    - id: session-invariant
+      name: '@deepseek-ai/dsh-session/invariant'
+    - id: agent-invariant
+      name: '@deepseek-ai/dsh-agent/invariant'
+    - id: scope-invariant
+      name: '@deepseek-ai/dsh-scope/invariant'
+    - id: agent-loop-invariant
+      name: '@deepseek-ai/dsh-agent-loop/invariant'
+    - id: agent-loop
+      name: '@deepseek-ai/dsh-agent-loop'
+      config:
+        agents: []
+    - id: persistent-bash
+      name: '@deepseek-ai/dsh-tool-bash-persistent'
+      disabled: !!js process.platform === 'win32'
+      config:
+        timeoutMs: 300000
+        description: >-
+          Run commands in a bash shell
+    
+          * When invoking this tool, the contents of the "command" parameter does
+          NOT need to be XML-escaped.
+    
+          * Network access depends on the task environment. Prefer configured
+          mirrors/proxies when they are available.
+    
+          * State is persistent across command calls and discussions with the user.
+    
+          * To inspect a particular line range of a file, e.g. lines 10-25, try 'sed
+          -n 10,25p /path/to/the/file'.
+    
+          * Please avoid commands that may produce a very large amount of output.
+    
+          * Please run long lived commands in the background, e.g. 'sleep 10 &' or
+          start a server in the background.
+    - id: persistent-pwsh
+      name: '@deepseek-ai/dsh-tool-pwsh-persistent'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        timeoutMs: 300000
+        description: >-
+          Run commands in a PowerShell shell
+    
+          * When invoking this tool, the contents of the "command" parameter does
+          NOT need to be XML-escaped.
+    
+          * You don't have access to the internet via this tool.
+    
+          * State is persistent across command calls and discussions with the user.
+    
+          * Use native Windows paths (C:\...) and $env:NAME variables; this is
+          PowerShell, not bash.
+    
+          * Please avoid commands that may produce a very large amount of output.
+    
+          * Please run long lived commands in the background, e.g. 'Start-Job' or
+          start a server with Start-Process.
+    - id: sessions
+      name: '@deepseek-ai/dsh-session-persistence-jsonl'
+      config:
+        root: !!js dshHomePath('sessions')
+        compression: none
+
+# ── Part 2: Graft deltas ───────────────────────────────────────────────────────
+# Model: the local doer via Ollama's OpenAI-compatible endpoint. The route lists
+# exactly one model, so a replay driver requesting any other model fails with
+# UNKNOWN_MODEL — the pin is enforced by composition, not by convention.
+# (Tag + digest recorded in ops/VERSIONS.md; model id must match it exactly.)
+- insert:
+    - id: llm-pi-ai
+      name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          ollama-local:
+            displayName: Ollama (localhost)
+            # Ollama has no auth; pi-ai still refuses keyless routes. GRAFT_OLLAMA_KEY is a
+            # fixed non-secret placeholder set by ops/scripts/dsh — never a credential.
+            apiKeyEnv: GRAFT_OLLAMA_KEY
+            api: openai-completions
+            baseURL: http://localhost:11434/v1
+            models:
+              - id: graft-doer:8k
+                name: Graft doer
+                contextWindow: 8192
+                maxTokens: 4096
+            retryPolicy:
+              mode: normal
+              maxRetries: 1
+
+# No cloud model, no DeepSeek request enrichments / session-log upload.
+- id: llm-deepseek
+  disabled: true
+- id: session-log-deepseek
+  disabled: true
+- id: plugin-package-inventory-deepseek
+  disabled: true
+- id: deepseek-llm-api-extensions
+  disabled: true
+
+# Upstream minimal ships danger-full-access; Graft replays run confined to the
+# replay workspace (RISK-REGISTER #2).
+- id: sandbox-policy
+  config:
+    mode: workspace-write
+    workspaceRoot: !!js process.cwd()
+
+# Replay sessions persist under the gitignored data/ tree, separate from live runs.
+- id: sessions
+  config:
+    root: !!js process.env.GRAFT_REPO_ROOT + '/data/dsh-sessions/replay'
+    compression: none

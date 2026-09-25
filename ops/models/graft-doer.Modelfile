@@ -1,0 +1,9 @@
+# Graft doer — qwen3:8b (Q4_K_M, text-only) with the context window pinned to the
+# largest size that stays 100% GPU-resident on the 8 GB card (measured 2026-09-25:
+# 8192 → 100% GPU ~47 tok/s; 16384 → 20% CPU spill; 32768 → 41% CPU spill).
+# dsh reaches Ollama via the OpenAI-compatible /v1 endpoint, which cannot pass
+# num_ctx and otherwise loads at 4096. Recreate with:
+#   ollama create graft-doer:8k -f ops/models/graft-doer.Modelfile
+# Base digest is pinned in ops/VERSIONS.md; the FROM tag must resolve to it.
+FROM qwen3:8b
+PARAMETER num_ctx 8192

@@ -25,3 +25,5 @@ ops/dsh/home/profiles/*/node_modules/
 
 # Automation state
 ops/automation/pause
+ops/dsh/home/storages/
+ops/dsh/home/profiles/*/.dsh-module-fallback
