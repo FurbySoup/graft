@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 160" width="800" height="160" role="img" aria-labelledby="t d">
+<title id="t">Graft</title>
+<desc id="d">Graft wordmark: a scion joined onto a rootstock, with the tagline "Skill self-improvement without self-corruption".</desc>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M72 140V86" stroke="#6e5a45" stroke-width="10"/>
+<path d="M60 146h24" stroke="#6e5a45" stroke-width="4"/>
+<path d="M72 92L82 28" stroke="#1a7f37" stroke-width="6"/>
+<path d="M80 42c14-12 28-12 36-4c-10 8-24 10-36 4z" stroke="#1a7f37" stroke-width="3"/>
+<path d="M78 56c-12-10-24-10-30-4c8 7 20 9 30 4z" stroke="#1a7f37" stroke-width="3"/>
+<path d="M63 90l18 6M63 99l18 6" stroke="#9a6700" stroke-width="3"/>
+</g>
+<text x="138" y="96" font-family="system-ui,-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif" font-size="84" font-weight="700" letter-spacing="-1" fill="#1f2328">graft</text>
+<text x="141" y="138" font-family="system-ui,-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif" font-size="22" fill="#59636e">Skill self-improvement without self-corruption</text>
+</svg>
