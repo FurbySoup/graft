@@ -56,26 +56,28 @@ skills, code, prompts or configs — was imported.
 
 ## How it works: one evidence chain from episode to merge
 
-The left half runs live and can only record; the right half runs offline and is the
+The top half runs live and can only record; the bottom half runs offline and is the
 only place skills change.
 
 ```mermaid
-flowchart LR
-  subgraph online["Online — observe"]
-    E["Episode"] --> I["skill_injected event"]
-    I --> T1["Tier-1 deterministic check"]
-    T1 --> T2["Tier-2 judge (other family, fresh context)"]
-    T2 --> C["Calibrated p_correct"]
-    C --> L[("Append-only ledger")]
+flowchart TB
+  subgraph online["Online — observe (records only)"]
+    direction LR
+    E["Episode"] --> I["skill_injected<br/>event"]
+    I --> T1["Tier-1<br/>deterministic check"]
+    T1 --> T2["Tier-2 judge<br/>other family, fresh context"]
+    T2 --> C["Calibrated<br/>p_correct"]
+    C --> L[("Append-only<br/>ledger")]
   end
-  subgraph offline["Offline — mutate"]
-    B["N≥3 cited blames on one section"] --> D["Staged skill diff"]
-    D --> R["Paired canary replay (k=5, frozen profile)"]
-    R --> G{"graft-stats gate"}
+  subgraph offline["Offline — mutate (the only place skills change)"]
+    direction LR
+    B["N≥3 cited blames<br/>on one section"] --> D["Staged<br/>skill diff"]
+    D --> R["Paired canary replay<br/>k=5, frozen profile"]
+    R --> G{"graft-stats<br/>gate"}
     G -->|pass| M["Merge"]
     G -->|fail| X["Reject"]
   end
-  L --> B
+  online --> offline
 ```
 
 The rules the chain depends on:
