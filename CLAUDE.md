@@ -59,7 +59,7 @@ comes from `BACKLOG.md` items with machine-checkable definitions of done, and
 10. **Autonomous dev runs are PR-only.** The worker loop never merges and never
     touches the hard-exclusion paths (SPEC §9).
 
-## Architecture (full detail: `SPEC.md`, `docs/SPEC.md` after Phase 0)
+## Architecture (full detail: `docs/SPEC.md`)
 
 Runtime (dsh/Cordis plugins): `graft-trust` (skill registry, lifecycle states,
 injection logging, ablation bypass) · `graft-judge` (tiered verification, verdict

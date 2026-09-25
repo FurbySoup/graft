@@ -15,10 +15,10 @@ validation between "the agent thinks it succeeded" and "the skill gets changed."
 |---|---|
 | `README.md` | This file. |
 | `CLAUDE.md` | Project memory for Claude Code. Copy to the new repo root as-is. |
-| `SPEC.md` | Full build specification: architecture, data model, phases, acceptance criteria. |
+| `docs/SPEC.md` | Full build specification: architecture, data model, phases, acceptance criteria. |
 | `SESSION-1-PROMPT.md` | Paste-ready kickoff prompt for the first Claude Code session (Phase 0). |
 | `SESSION-2-PROMPT.md` | Paste-ready prompt for Session 2: the Phase 0.5 autonomous worker loop. |
-| `RISK-REGISTER.md` | Known risks, mitigations, and review triggers. |
+| `docs/RISK-REGISTER.md` | Known risks, mitigations, and review triggers. |
 
 **v0.2 additions:** Phase 0.5 dev-automation loop (worker + review agent + cron;
 you groom the backlog and review PRs instead of driving sessions) · statistical
