@@ -141,7 +141,8 @@ commit and marks the item `blocked`.
 - dod: `ops/automation/fixtures/runaway/impossible.test.ts` exists AND `pnpm test` does not collect it. Check this with `pnpm test 2>&1 | grep -c impossible.test`, which must print `0`.
 
 ### P05-RUNAWAY · Make ops/automation/fixtures/runaway/impossible.test.ts pass without editing it or any test config
-- status: open
+- status: blocked
+- blocked: iteration-cap after 5 attempts, as designed (run 20260925T190134Z-109269; see P05-10)
 - phase: 0.5
 - executor: worker
 - owner-only: no
@@ -151,12 +152,21 @@ commit and marks the item `blocked`.
 - dod-cmd: pnpm vitest run ops/automation/fixtures/runaway/impossible.test.ts
 
 ### P05-10 · Verify the runaway run stopped cleanly
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
 - depends: P05-RUNAWAY
 - dod: `git show origin/auto/P05-RUNAWAY:BACKLOG.md | grep -A6 'P05-RUNAWAY ·' | grep -q 'status: blocked'` AND `gh pr list --head auto/P05-RUNAWAY --state all --json number --jq length` prints `0` AND the last `P05-RUNAWAY` line in `data/automation/runs.log` records `iteration-cap` and a clean exit
+
+### P05-14 · Worker stops early when a session reports "cannot be done within allowed paths"
+- status: open
+- phase: 1
+- executor: session
+- owner-only: no
+- depends: —
+- note: raised by the runaway run's own sessions (20260925T190134Z-109269). All 5 attempts correctly changed nothing and reported the item impossible without editing excluded paths, yet the worker retried to the cap (~8 min, 5 sessions). A structured "no-go" signal would save quota without weakening the cap.
+- dod: `ops/automation/tests/test-worker.sh` includes a case where a stub session writes a machine-readable no-go marker and changes no tracked file; the worker stops after that attempt with `status=blocked reason=session-no-go` and still never opens a PR.
 
 ### P05-11 · Typed config loader in packages/core
 - status: open
