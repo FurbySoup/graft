@@ -1,0 +1,12 @@
+version: 1
+metric: per_case_pass_rate        # over k runs per version
+k_runs: 5
+min_cases: 8                      # target 10 per skill
+test: exact_permutation           # wilcoxon reported alongside
+alpha: 0.05
+multiple_comparisons: benjamini_hochberg
+effect_floor:
+  median_delta_pp: 10             # both gates must pass: p AND floor
+report_effect_size: rank_biserial
+ablation_fraction: 0.10           # of live episodes, skills-off
+ewma_lambda: 0.2
