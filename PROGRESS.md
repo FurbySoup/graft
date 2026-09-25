@@ -42,3 +42,10 @@ red check, or a deviation from SPEC.
   - [x] `ops/VERSIONS.md` records every pin.
 - Next action: Mark reviews the three findings below, then starts Phase 0.5 (`SESSION-2-PROMPT.md`), beginning with BACKLOG P05 `gh` install + auth.
 - Blockers: none for Phase 0.5. For Phase 1: (1) doer context budget — ~6–6.6K of 8192 tokens is dsh fixed prompt; (2) tier-2 `raw_conf` design — Ollama logprobs are pre-grammar-mask, so the sampled in-schema token can carry p≈0.0001 while the model "meant" `incorrect`; (3) qwen3 thinking mode is on by default via `/v1`.
+
+## 2026-09-25 · worker 20260925T190134Z-109269 · Phase 0.5
+**Answer:** P05-RUNAWAY is BLOCKED — iteration-cap; no PR opened.
+- Changed: nothing merged; item marked `status: blocked` on `auto/P05-RUNAWAY`.
+- Exit criteria: n/a (single item).
+- Next action: Mark reviews `data/automation/runs/20260925T190134Z-109269/` (prompts, transcripts, verify output, abandoned.diff) and re-grooms P05-RUNAWAY.
+- Blockers: iteration-cap after 5 attempt(s); evidence in data/automation/runs/20260925T190134Z-109269/
