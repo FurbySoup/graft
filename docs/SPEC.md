@@ -228,15 +228,19 @@ with a skill edit.
 
 | Role | Model | Placement | Notes |
 |---|---|---|---|
-| Doer | qwen3.5:9b Q4_K_M text-only | GPU | sole VRAM resident during runs |
+| Doer | qwen3:8b Q4_K_M text-only, as `graft-doer:8k` (`num_ctx` 8192) | GPU | sole VRAM resident during runs; 8192 is the largest fully GPU-resident context |
 | Judge v1 | phi4-mini | CPU | decorrelated family — hard requirement |
 | Judge A/B | gemma-4 E-series; mellum2-12b-a2.5b | CPU/GPU | evaluate in Phase 2 |
 | Embeddings | qwen3-embedding:0.6b | CPU | dedup + retrieval |
 | Consolidator | Claude (Max plan) | offline | never in the runtime loop |
-| Draft (later) | qwen3.5:4b | GPU | only if replay throughput binds |
+| Draft (later) | small text-only Qwen (tag TBD) | GPU | only if replay throughput binds; qwen3.5 tags bundle vision — verify before use |
 
 Operational rule: sequence doer→judge via keep_alive/unload; never co-resident in
 8GB VRAM.
+
+Doer revision (2026-09-25, Phase 0): v0.2 named `qwen3.5:9b`. Measured on this card it
+bundles vision weights and spills 12% to CPU (~29 tok/s warm) vs `qwen3:8b` at 100%
+GPU (~47 tok/s warm); tags, digests and runs are in `ops/VERSIONS.md`.
 
 ## 6. Statistical gate & improvement evidence
 
