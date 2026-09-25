@@ -141,7 +141,8 @@ commit and marks the item `blocked`.
 - dod: `ops/automation/fixtures/runaway/impossible.test.ts` exists AND `pnpm test` does not collect it. Check this with `pnpm test 2>&1 | grep -c impossible.test`, which must print `0`.
 
 ### P05-RUNAWAY · Make ops/automation/fixtures/runaway/impossible.test.ts pass without editing it or any test config
-- status: open
+- status: claimed
+- claimed-by: 20260925T190134Z-109269
 - phase: 0.5
 - executor: worker
 - owner-only: no
