@@ -70,6 +70,9 @@ $(tail -n 40 "${out_dir}/gate.txt")" > "${out_dir}/prompt.md"
 main() {
   local run_id; run_id="review-$(new_run_id)"
   if is_paused; then log_event "${run_id}" - paused; echo "paused"; return 0; fi
+  if ! claude_logged_in "${CLAUDE_BIN}"; then
+    log_event "${run_id}" - infra-error reason=claude-not-logged-in exit=1; return 1
+  fi
   mkdir -p "${DATA_DIR}"
   exec 8> "${DATA_DIR}/review.lock"
   if ! flock -n 8; then log_event "${run_id}" - busy; return 0; fi
