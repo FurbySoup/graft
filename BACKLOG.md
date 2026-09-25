@@ -69,7 +69,7 @@ commit and marks the item `blocked`.
 ## Phase 0.5 — Dev automation loop (SPEC §9, SESSION-2-PROMPT.md)
 
 ### P05-01 · Install and authenticate gh inside WSL
-- status: open
+- status: done
 - phase: 0.5
 - executor: human
 - owner-only: yes
@@ -77,7 +77,7 @@ commit and marks the item `blocked`.
 - dod: `gh auth status` exits 0 in WSL AND `gh api user --jq .login` prints `FurbySoup`
 
 ### P05-02 · Create GitHub remote (FurbySoup) and push main
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: yes
@@ -117,7 +117,7 @@ commit and marks the item `blocked`.
 - dod: `bash -n ops/automation/review.sh` exits 0 AND `grep -Eq 'request-changes' ops/automation/review-prompt.md` AND `grep -Eq 'looks-good' ops/automation/review-prompt.md` AND `! grep -Eq -- '--(resume|continue)' ops/automation/review.sh`
 
 ### P05-07 · Cron schedule, install script, pause flag
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -125,7 +125,7 @@ commit and marks the item `blocked`.
 - dod: after `ops/automation/install-cron.sh`, `crontab -l | grep -cE 'ops/automation/(worker|review)\.sh'` prints ≥2. AND with `ops/automation/pause` present, `ops/automation/worker.sh` exits 0, creates no branch, and writes `paused` to `data/automation/runs.log`.
 
 ### P05-08 · Minimal GitHub Actions CI + branch protection on main
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: yes
