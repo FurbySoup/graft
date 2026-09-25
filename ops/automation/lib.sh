@@ -183,3 +183,128 @@ run_with_timeout() {
   local secs="$1"; shift
   timeout --kill-after=30 "${secs}" "$@"
 }
+
+# claude_logged_in <claude-bin>: exit 0 only if the CLI reports an authenticated
+# session. The worker and reviewer refuse to run otherwise (observed 2026-09-25: an
+# unauthenticated CLI fails every attempt in ~2 s and would masquerade as a cap hit).
+claude_logged_in() {
+  "$1" auth status 2>/dev/null | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("loggedIn") else 1)' 2>/dev/null
+}
+
+# ── Pause support: pid files, clean shutdown, claim release, Ollama unload ─────
+# Consumed by worker.sh / review.sh (pid files, TERM traps) and ops/scripts/graft.
+OLLAMA_HOST_URL="${OLLAMA_HOST_URL:-http://localhost:11434}"
+NVIDIA_SMI_BIN="${NVIDIA_SMI_BIN:-nvidia-smi}"
+WORKER_PID_FILE="${WORKER_PID_FILE:-${DATA_DIR}/worker.pid}"
+REVIEW_PID_FILE="${REVIEW_PID_FILE:-${DATA_DIR}/review.pid}"
+
+# write_pid_file <file> <run_id> [item]
+# Line 1: "<pid> <pgid> <run_id>"; line 2 (once known): the backlog item id.
+write_pid_file() {
+  local file="$1" run_id="$2" item="${3:-}" pgid
+  pgid="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')"
+  mkdir -p "$(dirname "${file}")"
+  { printf '%s %s %s\n' "$$" "${pgid:-?}" "${run_id}"; [[ -n "${item}" ]] && printf '%s\n' "${item}"; } > "${file}.tmp.$$"
+  mv -f "${file}.tmp.$$" "${file}"
+}
+
+# remove_own_pid_file <file>: remove it only if it still names this process.
+remove_own_pid_file() {
+  local file="$1" pid _rest
+  [[ -f "${file}" ]] || return 0
+  read -r pid _rest < "${file}" 2>/dev/null || return 0
+  [[ "${pid}" == "$$" ]] && rm -f "${file}"
+  return 0
+}
+
+# pid_file_live <file> <script-name>: prints the pid if the file names a live
+# process that is running <script-name> (guards against stale files / pid reuse).
+pid_file_live() {
+  local file="$1" script="$2" pid _rest
+  [[ -f "${file}" ]] || return 1
+  read -r pid _rest < "${file}" 2>/dev/null || return 1
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null || return 1
+  tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null | grep -qF "${script}" || return 1
+  printf '%s\n' "${pid}"
+}
+
+# descendants <pid>: every descendant pid, depth-first, children before parents.
+descendants() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    descendants "${child}"
+    printf '%s\n' "${child}"
+  done
+}
+
+# stop_children [grace-seconds]: TERM every descendant of this shell (the headless
+# `timeout`/`claude` group, gate/pnpm runs), wait up to the grace, then KILL.
+stop_children() {
+  local grace="${1:-15}" pids p i
+  pids="$(descendants "$$")"
+  [[ -z "${pids}" ]] && return 0
+  for p in ${pids}; do kill -TERM "${p}" 2>/dev/null || true; done
+  for (( i = 0; i < grace * 5; i++ )); do
+    local alive=0
+    for p in ${pids}; do kill -0 "${p}" 2>/dev/null && { alive=1; break; }; done
+    (( alive )) || return 0
+    sleep 0.2
+  done
+  for p in ${pids}; do kill -KILL "${p}" 2>/dev/null || true; done
+  return 0
+}
+
+# run_interruptible <cmd...>: run in the background and `wait`, so a TERM/INT trap
+# in the calling script fires immediately instead of after the child finishes.
+# Returns the command's exit status.
+run_interruptible() {
+  "$@" &
+  local child=$! rc=0
+  wait "${child}" || rc=$?
+  return "${rc}"
+}
+
+# release_claim <repo> <worktree> <branch> [remote]: drop a worker claim entirely —
+# worktree removed, branch deleted locally and (if a remote is given) remotely.
+# The item stays `open` on main; nothing is marked blocked.
+release_claim() {
+  local repo="$1" wt="$2" branch="$3" remote="${4:-}"
+  [[ -n "${wt}" && -d "${wt}" ]] && { git -C "${repo}" worktree remove --force "${wt}" >/dev/null 2>&1 || true; }
+  git -C "${repo}" worktree prune >/dev/null 2>&1 || true
+  git -C "${repo}" branch -q -D "${branch}" >/dev/null 2>&1 || true
+  if [[ -n "${remote}" ]]; then
+    git -C "${repo}" push --quiet "${remote}" --delete "${branch}" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+# ollama_ps: prints "<name>\t<size-bytes>\t<size_vram-bytes>" per loaded model.
+# Exit 1 if Ollama is unreachable.
+ollama_ps() {
+  local json
+  json="$(curl -fsS --max-time 5 "${OLLAMA_HOST_URL}/api/ps" 2>/dev/null)" || return 1
+  python3 -c '
+import json, sys
+for m in json.loads(sys.argv[1]).get("models") or []:
+    print("%s\t%s\t%s" % (m.get("name") or m.get("model"), m.get("size", 0), m.get("size_vram", 0)))
+' "${json}"
+}
+
+# ollama_unload <model>: ask Ollama to evict it now (keep_alive 0). /api/generate
+# works for completion and (on 0.34.x) embedding models; /api/embed with empty
+# input is the fallback for servers that refuse generate on an embedding model.
+ollama_unload() {
+  local model="$1" body
+  body="$(python3 -c 'import json,sys; print(json.dumps({"model": sys.argv[1], "keep_alive": 0}))' "${model}")"
+  curl -fsS --max-time 60 -o /dev/null "${OLLAMA_HOST_URL}/api/generate" -d "${body}" 2>/dev/null && return 0
+  body="$(python3 -c 'import json,sys; print(json.dumps({"model": sys.argv[1], "input": "", "keep_alive": 0}))' "${model}")"
+  curl -fsS --max-time 60 -o /dev/null "${OLLAMA_HOST_URL}/api/embed" -d "${body}" 2>/dev/null
+}
+
+# gpu_mem: prints "<used-MiB> <total-MiB>" for GPU 0; exit 1 if unavailable.
+gpu_mem() {
+  command -v "${NVIDIA_SMI_BIN}" >/dev/null 2>&1 || return 1
+  "${NVIDIA_SMI_BIN}" --query-gpu=memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null \
+    | awk -F', *' 'NR == 1 && $1 ~ /^[0-9]+$/ { print $1, $2; found = 1 } END { exit !found }'
+}

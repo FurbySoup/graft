@@ -5,6 +5,12 @@
 #   budget) → exclusion check → gate + DoD → push + PR, or mark blocked (no PR).
 # It NEVER merges and never pushes to main.
 #
+# Pause (ops/scripts/graft pause): the flag is checked at start and before every
+# attempt (soft: the in-flight attempt finishes, then the claim is released). While
+# running, the pid (and, once selected, the item) is in data/automation/worker.pid;
+# SIGTERM/SIGINT (graft pause --hard) stops the headless session and releases the
+# claim — item stays open, branch deleted local + remote, exit 0.
+#
 # Usage: worker.sh [--dry-run]
 #   --dry-run   print the item that would be selected and exit (no side effects)
 #
@@ -104,6 +110,36 @@ cleanup_worktree() {
   [[ -d "${wt}" ]] && git -C "${REPO_ROOT}" worktree remove --force "${wt}" >/dev/null 2>&1 || true
 }
 
+claim_remote() { if has_remote; then printf '%s' "${REMOTE}"; fi; }
+
+# Run state the signal/exit handlers need (globals: traps run outside main's scope).
+CUR_ITEM="" CUR_BRANCH="" CUR_WT="" CUR_ATTEMPT=0 FINALIZING=0 STOP_REQUESTED=0
+
+on_exit() {
+  [[ -n "${CUR_WT}" ]] && cleanup_worktree "${CUR_WT}"
+  remove_own_pid_file "${WORKER_PID_FILE}"
+}
+
+# SIGTERM/SIGINT (graft pause --hard): stop the session, release the claim, exit 0.
+# Once the run is finalising (success push / PR, or blocked commit) the signal is
+# deferred instead, so a finished result is never half-written.
+on_signal() {
+  if (( FINALIZING )); then STOP_REQUESTED=1; return 0; fi
+  trap '' TERM INT
+  stop_children 15
+  if [[ -n "${CUR_BRANCH}" ]]; then
+    release_claim "${REPO_ROOT}" "${CUR_WT}" "${CUR_BRANCH}" "$(claim_remote)"
+    CUR_WT=""
+    log_event "${RUN_ID}" "${CUR_ITEM:--}" end status=paused signal=term attempts="${CUR_ATTEMPT}" claim=released exit=0
+    echo "stopped by signal: claim on ${CUR_ITEM} released" >&2
+  else
+    log_event "${RUN_ID}" "${CUR_ITEM:--}" end status=paused signal=term claim=none exit=0
+    echo "stopped by signal before claiming" >&2
+  fi
+  remove_own_pid_file "${WORKER_PID_FILE}"
+  exit 0
+}
+
 main() {
   local dry_run=0
   [[ "${1:-}" == "--dry-run" ]] && dry_run=1
@@ -115,6 +151,9 @@ main() {
   mkdir -p "${DATA_DIR}"
   exec 9> "${DATA_DIR}/worker.lock"
   if ! flock -n 9; then log_event "${RUN_ID}" - busy; echo "another worker run holds the lock"; return 0; fi
+  write_pid_file "${WORKER_PID_FILE}" "${RUN_ID}"
+  trap on_exit EXIT
+  trap on_signal TERM INT
 
   has_remote && git -C "${REPO_ROOT}" fetch --quiet --prune "${REMOTE}"
   local base; base="$(base_ref)"
@@ -136,6 +175,14 @@ main() {
   phase="$(item_field "${backlog_snapshot}" "${item}" phase)"
   block="$(item_block "${backlog_snapshot}" "${item}")"
   if [[ "${dry_run}" == 1 ]]; then echo "${item}"; return 0; fi
+  CUR_ITEM="${item}"
+  write_pid_file "${WORKER_PID_FILE}" "${RUN_ID}" "${item}"
+  if ! claude_logged_in "${CLAUDE_BIN}"; then
+    log_event "${RUN_ID}" - infra-error reason=claude-not-logged-in exit=1
+    echo "claude CLI is not logged in (run: claude auth login); nothing claimed" >&2
+    return 1
+  fi
+
   if [[ -z "${dod}" ]]; then
     log_event "${RUN_ID}" "${item}" skipped reason=no-dod-cmd
     echo "item ${item} has no dod-cmd; the worker only runs machine-checkable items"; return 0
@@ -144,11 +191,13 @@ main() {
   log_event "${RUN_ID}" "${item}" start base="${base}"
   local branch="auto/${item}" wt="${WT_ROOT}/${item}" run_dir="${DATA_DIR}/runs/${RUN_ID}"
   mkdir -p "${WT_ROOT}" "${run_dir}"
+  # select_item guarantees no auto/<id> branch existed, so from here it is ours to release.
+  CUR_BRANCH="${branch}" CUR_WT="${wt}"
   git -C "${REPO_ROOT}" worktree add --quiet -b "${branch}" "${wt}" "${base}"
-  trap 'cleanup_worktree "'"${wt}"'"' EXIT
 
   # Claim: status → claimed on the branch; pushing the branch is the lock.
-  ( cd "${wt}" && mkdir -p "${XDG_CACHE_HOME:-${HOME}/.cache}" && flock "${XDG_CACHE_HOME:-${HOME}/.cache}/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent )
+  run_interruptible bash -c 'cd "$1" && mkdir -p "$2" && flock "$2/graft-pnpm-install.lock" pnpm install --frozen-lockfile --offline --reporter=silent' \
+    _ "${wt}" "${XDG_CACHE_HOME:-${HOME}/.cache}"
   set_item_status "${wt}/BACKLOG.md" "${item}" claimed "claimed-by: ${RUN_ID}"
   git -C "${wt}" add BACKLOG.md
   git -C "${wt}" commit --quiet -m "chore(backlog): claim ${item} (${RUN_ID})"
@@ -158,14 +207,21 @@ main() {
 
   local attempt=0 outcome="" feedback="" verify_out
   while (( attempt < MAX_ATTEMPTS )); do
-    attempt=$(( attempt + 1 ))
+    # Soft pause: the previous attempt was allowed to finish; start no new one.
+    if is_paused; then outcome="paused"; break; fi
+    attempt=$(( attempt + 1 )); CUR_ATTEMPT="${attempt}"
     if (( $(date +%s) - start_epoch > RUN_DEADLINE )); then outcome="run-deadline"; break; fi
     local prompt_file="${run_dir}/prompt-${attempt}.md" transcript="${run_dir}/claude-${attempt}.json"
     render_prompt "${item}" "${block}" "${dod}" "${attempt}" "${feedback}" "${phase}" > "${prompt_file}"
     local rc=0
-    run_claude "${wt}" "${prompt_file}" "${transcript}" || rc=$?
+    run_interruptible run_claude "${wt}" "${prompt_file}" "${transcript}" || rc=$?
     log_event "${RUN_ID}" "${item}" attempt n="${attempt}" claude_exit="${rc}"
     [[ "${rc}" == 124 || "${rc}" == 137 ]] && log_event "${RUN_ID}" "${item}" timeout n="${attempt}" secs="${CLAUDE_TIMEOUT}"
+    if [[ "${rc}" != 0 && "${rc}" != 124 && "${rc}" != 137 ]]; then
+      # The session itself failed (auth, CLI crash, API outage) — that says nothing
+      # about the item. Release the claim entirely and leave the item open.
+      outcome="infra-error"; break
+    fi
 
     mapfile -t touched < <(changed_paths "${wt}" "${claim_sha}")
     local violations
@@ -176,7 +232,7 @@ main() {
     fi
 
     verify_out="${run_dir}/verify-${attempt}.txt"
-    if verify "${wt}" "${dod}" "${verify_out}"; then outcome="green"; break; fi
+    if run_interruptible verify "${wt}" "${dod}" "${verify_out}"; then outcome="green"; break; fi
     log_event "${RUN_ID}" "${item}" red n="${attempt}"
     feedback="## Previous attempt failed verification (attempt ${attempt})
 
@@ -189,6 +245,26 @@ $(tail -n 60 "${verify_out}")
 Fix the cause. Do not weaken tests or checks."
   done
   [[ -z "${outcome}" ]] && outcome="iteration-cap"
+
+  if [[ "${outcome}" == "paused" ]]; then
+    trap '' TERM INT
+    release_claim "${REPO_ROOT}" "${wt}" "${branch}" "$(claim_remote)"
+    CUR_WT=""
+    log_event "${RUN_ID}" "${item}" end status=paused attempts="${attempt}" claim=released exit=0
+    echo "paused: stopped before attempt $(( attempt + 1 )); claim on ${item} released"
+    return 0
+  fi
+
+  # Past this point the run records a result; a stop signal waits for it (see on_signal).
+  FINALIZING=1
+
+  if [[ "${outcome}" == "infra-error" ]]; then
+    release_claim "${REPO_ROOT}" "${wt}" "${branch}" "$(claim_remote)"
+    CUR_WT=""
+    log_event "${RUN_ID}" "${item}" end status=infra-error claude_exit="${rc}" attempts="${attempt}" claim=released exit=1
+    echo "infra-error: headless session failed (exit ${rc}); claim on ${item} released" >&2
+    return 1
+  fi
 
   if [[ "${outcome}" == "green" ]]; then
     # Commit anything the session left uncommitted (the pre-commit hook re-gates it).
@@ -222,8 +298,6 @@ Fix the cause. Do not weaken tests or checks."
         echo '```'
         printf '%s\n' "${block}"
         echo '```'
-        echo
-        echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
       } > "${body}"
       local pr_url
       pr_url="$("${GH_BIN}" pr create --base "${BASE}" --head "${branch}" \
