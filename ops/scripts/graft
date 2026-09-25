@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# graft — project-wide pause switch for Graft's local activity.
+#
+#   graft pause [--hard] [--reason "text"]   stop new activity, free Ollama VRAM/RAM
+#   graft resume                             lift the pause (does not preload models)
+#   graft status                             exit 0 = active, 3 = paused
+#
+# pause:  writes ops/automation/pause (since=/reason=/mode=), which worker.sh and
+#         review.sh check at start and between steps; unloads every model Ollama has
+#         loaded (keep_alive 0) and waits for /api/ps to empty. --hard additionally
+#         SIGTERMs an in-flight worker/review run (they release their claim and exit 0),
+#         waits up to 60 s, then SIGKILLs as a last resort. Idempotent.
+# resume: removes the flag. Models load again on first use.
+#
+# Env overrides (tests): OLLAMA_HOST_URL, NVIDIA_SMI_BIN, PAUSE_FLAG, DATA_DIR,
+# RUNS_LOG, GRAFT_UNLOAD_TIMEOUT (30), GRAFT_STOP_TIMEOUT (60).
+set -euo pipefail
+
+# shellcheck source=../automation/lib.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../automation" && pwd)/lib.sh"
+
+UNLOAD_TIMEOUT="${GRAFT_UNLOAD_TIMEOUT:-30}"
+STOP_TIMEOUT="${GRAFT_STOP_TIMEOUT:-60}"
+CRON_BEGIN="# BEGIN graft-automation"
+CRON_END="# END graft-automation"
+
+usage() {
+  cat <<'EOF'
+usage: graft pause [--hard] [--reason "text"]
+       graft resume
+       graft status        (exit 0 = active, 3 = paused)
+EOF
+}
+
+# flag_field <key>: value of key=... in the pause flag (empty if absent).
+flag_field() {
+  [[ -f "${PAUSE_FLAG}" ]] || return 0
+  awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "${PAUSE_FLAG}"
+}
+
+fmt_bytes() { awk -v b="$1" 'BEGIN { if (b >= 1073741824) printf "%.1f GiB", b / 1073741824; else printf "%.0f MiB", b / 1048576 }'; }
+
+gpu_line() {
+  local used total
+  if read -r used total < <(gpu_mem); then printf '%s / %s MiB' "${used}" "${total}"; else printf 'n/a (nvidia-smi unavailable)'; fi
+}
+
+# run_state <pid-file> <script>: "pid <n>[, item <id>]" or "none".
+run_state() {
+  local file="$1" script="$2" pid item
+  if pid="$(pid_file_live "${file}" "${script}")"; then
+    item="$(sed -n 2p "${file}" 2>/dev/null || true)"
+    printf 'pid %s%s' "${pid}" "${item:+, item ${item}}"
+  else
+    printf 'none'
+  fi
+}
+
+# stop_run <pid-file> <script> <label>: TERM, wait ≤ STOP_TIMEOUT, then KILL.
+stop_run() {
+  local file="$1" script="$2" label="$3" pid pgid _run i
+  if ! pid="$(pid_file_live "${file}" "${script}")"; then
+    echo "  ${label}: not running"; return 0
+  fi
+  read -r _ pgid _run < "${file}" 2>/dev/null || pgid=""
+  echo "  ${label}: stopping pid ${pid} (SIGTERM, up to ${STOP_TIMEOUT}s)…"
+  kill -TERM "${pid}" 2>/dev/null || true
+  for (( i = 0; i < STOP_TIMEOUT * 5; i++ )); do
+    kill -0 "${pid}" 2>/dev/null || { echo "  ${label}: stopped cleanly (claim released, if any)"; return 0; }
+    sleep 0.2
+  done
+  echo "  ${label}: still running after ${STOP_TIMEOUT}s — SIGKILL (claim may need manual release)"
+  # Kill its own process group only if it leads one (cron's `timeout` wrapper makes
+  # a group; a shell-launched run shares its caller's group, which must survive).
+  if [[ -n "${pgid}" && "${pgid}" == "${pid}" ]]; then
+    kill -KILL -- "-${pgid}" 2>/dev/null || true
+  else
+    local p
+    for p in $(descendants "${pid}") "${pid}"; do kill -KILL "${p}" 2>/dev/null || true; done
+  fi
+  rm -f "${file}"
+  return 0
+}
+
+# unload_models: prints a summary line per model; never fails.
+unload_models() {
+  local models name size vram i
+  if ! models="$(ollama_ps)"; then
+    echo "  Ollama not reachable at ${OLLAMA_HOST_URL} — nothing to free"
+    return 0
+  fi
+  if [[ -z "${models}" ]]; then
+    echo "  no models loaded — nothing to free"
+    return 0
+  fi
+  while IFS=$'\t' read -r name size vram; do
+    if ollama_unload "${name}"; then
+      echo "  unloaded ${name} ($(fmt_bytes "${size}"), $(fmt_bytes "${vram}") in VRAM)"
+    else
+      echo "  FAILED to request unload of ${name}"
+    fi
+  done <<< "${models}"
+  for (( i = 0; i < UNLOAD_TIMEOUT * 2; i++ )); do
+    models="$(ollama_ps 2>/dev/null || true)"
+    [[ -z "${models}" ]] && { echo "  Ollama reports no models loaded"; return 0; }
+    sleep 0.5
+  done
+  echo "  WARNING: still loaded after ${UNLOAD_TIMEOUT}s: $(cut -f1 <<< "${models}" | paste -sd, -)"
+  return 0
+}
+
+cmd_pause() {
+  local mode="soft" reason="manual"
+  while (( $# )); do
+    case "$1" in
+      --hard) mode="hard" ;;
+      --reason) [[ $# -ge 2 ]] || { usage >&2; return 2; }; reason="$2"; shift ;;
+      --reason=*) reason="${1#--reason=}" ;;
+      -h|--help) usage; return 0 ;;
+      *) echo "unknown option: $1" >&2; usage >&2; return 2 ;;
+    esac
+    shift
+  done
+  reason="${reason//$'\n'/ }"; [[ -z "${reason}" ]] && reason="manual"
+  local since; since="$(flag_field since)"
+  [[ -z "${since}" ]] && since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  mkdir -p "$(dirname "${PAUSE_FLAG}")"
+  printf 'since=%s\nreason=%s\nmode=%s\n' "${since}" "${reason}" "${mode}" > "${PAUSE_FLAG}.tmp.$$"
+  mv -f "${PAUSE_FLAG}.tmp.$$" "${PAUSE_FLAG}"
+  log_event "ctl-$(new_run_id)" - pause-requested mode="${mode}" reason="$(tr -s ' \t' '__' <<< "${reason}")"
+
+  local gpu_before; gpu_before="$(gpu_mem 2>/dev/null || true)"
+  echo "Graft PAUSED since ${since} — reason: ${reason} — mode: ${mode}"
+  echo "Runs:"
+  if [[ "${mode}" == "hard" ]]; then
+    stop_run "${WORKER_PID_FILE}" worker.sh worker
+    stop_run "${REVIEW_PID_FILE}" review.sh review
+  else
+    local w r
+    w="$(run_state "${WORKER_PID_FILE}" worker.sh)"; r="$(run_state "${REVIEW_PID_FILE}" review.sh)"
+    [[ "${w}" != none ]] && w+=" — still running; stops before its next attempt (--hard stops it now)"
+    [[ "${r}" != none ]] && r+=" — still running; stops before its next PR (--hard stops it now)"
+    echo "  worker: ${w}"
+    echo "  review: ${r}"
+  fi
+  echo "Ollama models:"
+  unload_models
+  local gpu_after; gpu_after="$(gpu_mem 2>/dev/null || true)"
+  if [[ -n "${gpu_before}" && -n "${gpu_after}" ]]; then
+    echo "GPU memory used: ${gpu_before% *} → ${gpu_after% *} MiB (of ${gpu_after#* } MiB)"
+  else
+    echo "GPU memory: n/a (nvidia-smi unavailable)"
+  fi
+  echo "Resume with: ops/scripts/graft resume"
+  return 0
+}
+
+cmd_resume() {
+  if [[ -e "${PAUSE_FLAG}" ]]; then
+    rm -f "${PAUSE_FLAG}"
+    log_event "ctl-$(new_run_id)" - resumed
+    echo "Graft resumed (models load again on first use)."
+  else
+    echo "Graft was not paused."
+  fi
+  echo
+  cmd_status || true
+  return 0
+}
+
+cmd_status() {
+  local paused=0
+  if is_paused; then
+    paused=1
+    echo "PAUSED since $(flag_field since || true) — reason: $(flag_field reason || true) — mode: $(flag_field mode || true)"
+  else
+    echo "ACTIVE"
+  fi
+  echo "Runs:"
+  echo "  worker: $(run_state "${WORKER_PID_FILE}" worker.sh)"
+  echo "  review: $(run_state "${REVIEW_PID_FILE}" review.sh)"
+  local models name size vram
+  if models="$(ollama_ps)"; then
+    echo "Ollama (${OLLAMA_HOST_URL}): reachable"
+    if [[ -z "${models}" ]]; then
+      echo "  no models loaded"
+    else
+      while IFS=$'\t' read -r name size vram; do
+        local proc
+        proc="$(awk -v s="${size}" -v v="${vram}" 'BEGIN {
+          if (s <= 0 || v <= 0) print "100% CPU"; else if (v >= s) print "100% GPU";
+          else printf "%d%%/%d%% CPU/GPU", (s - v) * 100 / s, v * 100 / s }')"
+        echo "  ${name}  $(fmt_bytes "${size}")  ${proc}"
+      done <<< "${models}"
+    fi
+  else
+    echo "Ollama (${OLLAMA_HOST_URL}): not reachable"
+  fi
+  echo "GPU memory used: $(gpu_line)"
+  local block
+  block="$(crontab -l 2>/dev/null | awk -v b="${CRON_BEGIN}" -v e="${CRON_END}" '$0==b{p=1;next} $0==e{p=0} p' || true)"
+  if [[ -n "${block}" ]]; then
+    echo "Cron: installed"
+    sed 's/^/  /' <<< "${block}"
+  else
+    echo "Cron: not installed (ops/automation/install-cron.sh)"
+  fi
+  (( paused )) && return 3
+  return 0
+}
+
+main() {
+  local cmd="${1:-}"
+  [[ $# -gt 0 ]] && shift
+  case "${cmd}" in
+    pause) cmd_pause "$@" ;;
+    resume) cmd_resume "$@" ;;
+    status) cmd_status "$@" ;;
+    -h|--help|help) usage ;;
+    *) usage >&2; return 2 ;;
+  esac
+}
+
+main "$@"

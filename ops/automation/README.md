@@ -15,7 +15,7 @@ review pass comments on it; Mark merges. Nothing here ever merges or pushes to `
 | `install-cron.sh` | Installs / removes the cron block |
 | `tests/` | `test-worker.sh`, `test-hooks.sh` — stubbed, offline |
 | `fixtures/` | Test backlog; the runaway test's impossible test |
-| `pause` (gitignored) | Kill switch: if present, both scripts log `paused` and exit 0 |
+| `pause` (gitignored) | Kill switch flag, managed by `ops/scripts/graft pause` / `graft resume` (see Pause): if present, both scripts log `paused` and exit 0 |
 
 ## How the worker chooses and finishes an item
 
@@ -75,7 +75,34 @@ WebFetch, WebSearch). Anything not allowed is refused in `-p` mode.
 
 `install-cron.sh` (idempotent; `--remove` to uninstall) installs, in local time:
 worker every 30 min 00:00–06:30; review at :15/:45 00:15–07:45. Many short runs, no
-daemon. Pause without uninstalling: `touch ops/automation/pause`.
+daemon. Pause without uninstalling: `ops/scripts/graft pause` (see Pause).
+
+## Pause
+
+**Run `ops/scripts/graft pause` to free the GPU and stop new project activity;
+`ops/scripts/graft resume` to restart it.** From Windows, double-click the launchers in
+[`ops/windows/`](../windows/README.md).
+
+- **Pause blocks every new run and frees model memory.** It writes the flag file
+  `ops/automation/pause` (since / reason / mode), unloads all Ollama models (VRAM and
+  RAM) and prints GPU memory before → after. While the flag exists, `worker.sh` and
+  `review.sh` log `paused` and exit 0 (cron keeps firing; each run exits immediately),
+  and `ops/scripts/dsh` refuses to start with **exit 75**.
+- **Soft vs hard only differs for a run already in progress:**
+
+  | Mode | Command | In-flight worker/review run |
+  |---|---|---|
+  | Soft (default) | `graft pause [--reason "text"]` | Finishes its current attempt, then stops. Headless Claude uses cloud compute, so it costs only local CPU/RAM (builds, tests), not GPU |
+  | Hard | `graft pause --hard [--reason "text"]` | Stopped now, cleanly: its claim is released and the item stays `open` |
+
+- **Resume only removes the flag.** Models are not preloaded; Ollama loads one the next
+  time Graft asks. The Ollama service itself stays up throughout — idle with no models
+  it holds ~0 extra VRAM.
+- **Check with `graft status`**: PAUSED/ACTIVE, running runs, loaded models, GPU memory,
+  cron schedule. Exit 0 when active, 3 when paused.
+
+A bare `touch ops/automation/pause` still blocks runs, but does not unload models or
+record a reason — prefer `graft pause`.
 
 ## Known limits
 
