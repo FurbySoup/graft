@@ -12,24 +12,22 @@ single desktop (RTX 4060 Ti 8GB / 64GB RAM / WSL2 Ubuntu).
 
 ## Current state — read before acting
 
-The repo is **pre-Phase-0**: docs only, no git, no code, no toolchain. Nothing in
-the layout below exists yet except the markdown files at the root.
+**Phase 0 is complete (2026-09-25); next is Phase 0.5** (`SESSION-2-PROMPT.md`), once
+Mark confirms the P0 exit checklist in `PROGRESS.md`. Nothing from Phase 0.5 or 1 exists.
 
-- Present: `CLAUDE.md`, `README.md`, `SPEC.md`, `RISK-REGISTER.md`,
-  `SESSION-1-PROMPT.md`, `SESSION-2-PROMPT.md`, `graft-starter-v0.2.zip`
-  (the pack these came from — same 6 files, safe to delete once scaffolded).
-- Absent until Phase 0 runs: `.git`, `docs/`, `packages/`, `sidecars/`, `ops/`,
-  `skills/`, `canaries/`, `data/`, `BACKLOG.md`, `PROGRESS.md`, any package
-  manifest or test runner.
-- **Paths in this file describe the target layout, not today's tree.** SPEC.md and
-  RISK-REGISTER.md live at the root and only move into `docs/` during Phase 0
-  (SESSION-1-PROMPT.md task 1) — read `SPEC.md` until then.
-
-Work is driven by paste-ready session prompts, one per phase gate:
-`SESSION-1-PROMPT.md` = Phase 0 (sandbox, pins, scaffold, smoke tests),
-`SESSION-2-PROMPT.md` = Phase 0.5 (autonomous worker loop). From Phase 1 on, work
-comes from `BACKLOG.md` items with machine-checkable definitions of done, and
-`PROGRESS.md` is the handoff file: **read it first, write it last, every session.**
+- **Built:** git repo; pnpm workspace (`packages/core` ledger schema + append-only
+  SQLite migration; `packages/plugins/graft-{trust,judge,ledger}` Cordis stubs that only
+  log mount/unmount, mounted nowhere); `sidecars/calibrate` stdlib-only stubs; dsh
+  0.1.5-rc.3 pinned with profiles `graft` and frozen `graft-replay`; Ollama models pulled
+  and smoke-tested; `ops/stats.yaml` pre-registered; `BACKLOG.md`, `PROGRESS.md`,
+  ADR-0001, `docs/prior-art-skill-tree.md`.
+- **Read `ops/VERSIONS.md` before touching dsh or models.** It records every pin and
+  every place dsh diverges from SPEC — above all: dsh has **profiles, not presets**; the
+  doer is **`graft-doer:8k` (qwen3:8b), not qwen3.5:9b**; the doer's context is **8192
+  tokens**, of which dsh's fixed prompt uses ~6K.
+- **Absent until later phases:** `ops/automation/`, `skills/registry.yaml`, any skills
+  or canaries, `ops/scripts/gen-kata`, the tracker, `gh` in WSL, a GitHub remote.
+- `SPEC.md` and `RISK-REGISTER.md` live in `docs/`.
 
 ## Core principles — enforce these in every change
 
@@ -134,35 +132,51 @@ graft/
 - dsh **pinned** to the exact version recorded in `ops/VERSIONS.md`. Upgrades are a
   deliberate task with an adapter-repair budget, never incidental.
 - Ollama at `http://localhost:11434`. Models (also in `ops/VERSIONS.md`):
-  - Doer: `qwen3.5:9b` Q4_K_M, text-only — GPU. One model resident in VRAM at a time.
+  - Doer: `graft-doer:8k` = `qwen3:8b` Q4_K_M text-only + `num_ctx 8192`
+    (`ops/models/graft-doer.Modelfile`) — GPU. SPEC §5's `qwen3.5:9b` was rejected:
+    vision-bundled and spills 12% to CPU (evidence in `ops/VERSIONS.md`). One model
+    resident in VRAM at a time.
   - Judge: `phi4-mini` — CPU/RAM (decorrelated family; do not swap to a Qwen judge).
   - Embeddings: `qwen3-embedding:0.6b` — CPU.
   - Consolidator: Claude (this tool), offline sessions only.
-- TypeScript throughout `packages/`: **strict mode, no `any`** — apply the
-  strict-typescript-mode skill. Debugging: apply the systematic-debugging skill
+- TypeScript throughout `packages/`: **strict mode, no `any`** — enforced by
+  `tsconfig.base.json` + `pnpm lint` (the strict-typescript-mode skill is not installed
+  in this environment). Debugging: apply the systematic-debugging skill
   before proposing fixes. Tracker work: pick the appropriate skill once its form
   is decided (SPEC §3.8) — nothing is prescribed in advance.
 
 ## Commands
 
-**None exist yet** — there is no package manifest, test runner, or venv in the tree.
-Do not invent invocations; the toolchain is established by Phase 0
-(`SESSION-1-PROMPT.md`), which fixes: Node LTS + pnpm workspace across `packages/`,
-a Python venv for `sidecars/calibrate`, dsh installed workspace-locally via
-`npx @deepseek-ai/dsh` and pinned in `ops/VERSIONS.md`.
+All commands run from the repo root (`/home/mark/graft`). pnpm comes from a corepack
+shim in `~/.local/bin` — make sure it is on `PATH` (`export PATH=$HOME/.local/bin:$PATH`
+in non-login shells such as cron). These are the contract the commit-gating hooks and
+the worker loop execute; every one was run green at the end of Phase 0.
 
-**Whoever completes Phase 0 must replace this section** with the real commands:
-install, typecheck, test-all, test-one-package, test-one-file, and the Python
-sidecar equivalents. They are the contract the commit-gating hooks and the worker
-loop run — those hooks reject commits on red, so a wrong command here breaks
-automation rather than just annoying a human.
+| Purpose | Command |
+|---|---|
+| Install (reproducible) | `pnpm install --frozen-lockfile` |
+| Typecheck (all packages + tests) | `pnpm typecheck` (= `tsc -b`) |
+| Lint (no explicit `any`) | `pnpm lint` |
+| Test all (TS) | `pnpm test` (= `vitest run`) |
+| Test one package | `pnpm --filter @furbysoup/graft-core test` (or `graft-trust` / `graft-judge` / `graft-ledger`) |
+| Test one file | `pnpm vitest run packages/core/src/ledger/migrate.test.ts` |
+| Everything | `pnpm check` (typecheck → lint → test) |
+| Python: test all | `sidecars/calibrate/.venv/bin/python -m unittest discover -s sidecars/calibrate/tests -t sidecars/calibrate` |
+| Python: test one file | `sidecars/calibrate/.venv/bin/python -m unittest discover -s sidecars/calibrate/tests -t sidecars/calibrate -p test_scaffold.py` |
+| dsh (only entry point) | `ops/scripts/dsh --profile graft "<task>"` — run from the workspace the task is confined to |
+| dsh composed config | `ops/scripts/dsh --profile graft --dump-config` (or `graft-replay`) |
+
+Notes: the venv has no third-party packages (PyPI not yet approved — BACKLOG). Node
+prints an `ExperimentalWarning` for `node:sqlite`; it is expected. New install scripts
+in dependencies are blocked by pnpm until reviewed and added to `allowBuilds` in
+`pnpm-workspace.yaml`.
 
 Interfaces already fixed by SPEC, whatever the runner turns out to be:
 
 | What | Where | Note |
 |---|---|---|
 | Ollama endpoint | `http://localhost:11434` | doer/judge/embeddings; verify reachable before any run |
-| Replay preset | `ops/presets/graft-replay/` | frozen Minimal preset — must never drift |
+| Replay profile | `ops/presets/graft-replay/` | frozen, derived from dsh `sdk-minimal` — must never drift (dsh has profiles, not presets) |
 | Improvement tracker | regeneration entry point under `ops/scripts/`, named when its form is chosen (SPEC §3.8) | must be read-only, offline, deterministic |
 | Kata generator | `ops/scripts/gen-kata` | task + hidden test-suite variants |
 | Worker loop | `ops/automation/worker.sh` | branch → green → PR; never merges; iteration cap 5 |
@@ -237,7 +251,8 @@ Legitimate uses, all read-only:
 - **Failure anatomy** — why statistical proof of improvement never arrived there.
 - **Pitfalls already paid for**: qwen thinking-mode field quirks, UTF-8 BOM in
   PowerShell-written JSON, Qdrant embedded single-client limit, context overhead
-  budget (~37% system overhead observed).
+  budget (the "~37%" figure is unconfirmed — see `docs/prior-art-skill-tree.md` §4;
+  Graft measures its own: dsh uses ~6K of the doer's 8K context).
 - **Concepts worth re-deriving from scratch** — e.g. guard patterns
   (InputGuard/OutputGuard/PermissionGuard) as inspiration for judge tier-1 checks.
 

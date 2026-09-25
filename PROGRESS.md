@@ -27,3 +27,18 @@ red check, or a deviation from SPEC.
 - Exit criteria (SPEC §8, P0): (close-out entry appended at end of session)
 - Next action: (close-out entry appended at end of session)
 - Blockers: (close-out entry appended at end of session)
+
+## 2026-09-25 · Session 1 close-out · Phase 0
+**Answer:** All P0 exit criteria are ticked, but three findings need Mark's attention before Phase 1: the SPEC doer (qwen3.5:9b) was replaced, the doer's usable context is ~2K tokens after dsh overhead, and the judge's logprobs under constrained decoding are not usable as `raw_conf` as-is.
+- Changed: commits `8a2caa0`…HEAD on `main` — starter import, docs/ move, `ops/stats.yaml` (standalone `522c408`), workspace + package skeletons, calibrate sidecar, prior-art note, BACKLOG/PROGRESS, directory READMEs, ADR-0001, dsh profiles + doer Modelfile, `ops/VERSIONS.md`, CLAUDE.md state/commands.
+- Exit criteria (SPEC §8, P0):
+  - [x] WSL2 workspace — `~/graft` on ext4; dsh sandbox `workspace-write`.
+  - [x] dsh installed & pinned — 0.1.5-rc.3 exact + frozen lockfile (`ops/VERSIONS.md`).
+  - [x] Ollama models pulled & smoke-tested — doer `graft-doer:8k` ~47 tok/s 100% GPU; judge phi4-mini 100% CPU, schema JSON + logprobs; embeddings 1024-dim CPU. **Substitution:** qwen3.5:9b → qwen3:8b (vision-bundled; 12% CPU spill at ~29 tok/s).
+  - [x] Monorepo scaffold — `pnpm check` green (10 TS tests), sidecar 6 unittest green.
+  - [x] Frozen Minimal preset committed — as profile `ops/presets/graft-replay/` (dsh has profiles, not presets; derived from `sdk-minimal`; composes and boots; not yet driven by an SDK client).
+  - [x] BACKLOG.md seeded — Phase 0.5 + Phase 1 + one undecided second-domain item (D-01).
+  - [x] One dsh Standard session completes a toy task with all models reachable — exit 0, `hello.md` written, session log captured (65 events). **Caveat:** output would fail tier-1 (literal `\n`, date typed not computed); 5 min wall time; 7 compactions.
+  - [x] `ops/VERSIONS.md` records every pin.
+- Next action: Mark reviews the three findings below, then starts Phase 0.5 (`SESSION-2-PROMPT.md`), beginning with BACKLOG P05 `gh` install + auth.
+- Blockers: none for Phase 0.5. For Phase 1: (1) doer context budget — ~6–6.6K of 8192 tokens is dsh fixed prompt; (2) tier-2 `raw_conf` design — Ollama logprobs are pre-grammar-mask, so the sampled in-schema token can carry p≈0.0001 while the model "meant" `incorrect`; (3) qwen3 thinking mode is on by default via `/v1`.
