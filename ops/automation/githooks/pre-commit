@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Reject any commit whose tree is not green. Installed via
+#   git config core.hooksPath ops/automation/githooks
+# (ops/automation/install-hooks.sh). Applies to humans, the worker and worktrees.
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+if ! out="$("${root}/ops/automation/gate.sh" 2>&1)"; then
+  printf '%s\n' "${out}" | tail -n 40 >&2
+  echo "pre-commit: gate is red — commit rejected (ops/automation/gate.sh)." >&2
+  exit 1
+fi

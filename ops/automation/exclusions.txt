@@ -1,0 +1,22 @@
+# Paths autonomous runs must never touch (SPEC §9 hard exclusions + the
+# automation's own guardrails). One repo-relative path or directory prefix per
+# line. Canary holdouts (canaries/** with `holdout: true`) are detected by content
+# in lib.sh. This file is itself excluded: only a human changes it.
+skills/
+ops/VERSIONS.md
+ops/stats.yaml
+ops/dsh/
+ops/presets/
+ops/scripts/dsh
+ops/models/
+# The automation may not weaken its own gates:
+ops/automation/
+.claude/
+.github/
+.gitignore
+pnpm-workspace.yaml
+vitest.config.ts
+eslint.config.js
+tsconfig.base.json
+# BACKLOG status is written by worker.sh itself, never by the headless session:
+BACKLOG.md
