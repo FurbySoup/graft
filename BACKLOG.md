@@ -169,7 +169,7 @@ commit and marks the item `blocked`.
 - dod: `ops/automation/tests/test-worker.sh` includes a case where a stub session writes a machine-readable no-go marker and changes no tracked file; the worker stops after that attempt with `status=blocked reason=session-no-go` and still never opens a PR.
 
 ### P05-11 · Typed config loader in packages/core
-- status: claimed
+- status: done
 - claimed-by: 20260925T230001Z-121886
 - phase: 0.5
 - executor: worker
