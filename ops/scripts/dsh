@@ -6,6 +6,17 @@
 # - The dsh binary is the workspace-pinned one, never a global install.
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Project-wide pause (ops/scripts/graft pause): no dsh run may start — dsh runs load
+# the doer onto the GPU. Exit 75 (EX_TEMPFAIL) so callers can tell "paused" from
+# failure. --dump-config / --help touch no model and are still allowed.
+if [[ -e "${repo_root}/ops/automation/pause" && "${GRAFT_IGNORE_PAUSE:-0}" != 1 ]]; then
+  case " $* " in
+    *" --dump-config "*|*" --dump-default-config "*|*" --help "*|*" -h "*) ;;
+    *)
+      echo "graft is paused ($(grep -m1 '^reason=' "${repo_root}/ops/automation/pause" 2>/dev/null | cut -d= -f2- || echo manual)); dsh run refused. Resume: ops/scripts/graft resume" >&2
+      exit 75 ;;
+  esac
+fi
 export DSH_HOME="${repo_root}/ops/dsh/home"
 export DSH_TELEMETRY_DISABLED=1
 export DSH_TELEMETRY_MODE=DISABLED

@@ -165,6 +165,9 @@ the worker loop execute; every one was run green at the end of Phase 0.
 | Python: test one file | `sidecars/calibrate/.venv/bin/python -m unittest discover -s sidecars/calibrate/tests -t sidecars/calibrate -p test_scaffold.py` |
 | dsh (only entry point) | `ops/scripts/dsh --profile graft "<task>"` — run from the workspace the task is confined to |
 | dsh composed config | `ops/scripts/dsh --profile graft --dump-config` (or `graft-replay`) |
+| Pause project activity | `ops/scripts/graft pause [--hard] [--reason "text"]` — blocks new worker/review/dsh runs, unloads Ollama models; `--hard` also stops an in-flight run |
+| Resume project activity | `ops/scripts/graft resume` — removes the pause flag; does not preload models |
+| Pause status | `ops/scripts/graft status` — exit 0 active, **exit 3 when paused** |
 
 Notes: the venv has no third-party packages (PyPI not yet approved — BACKLOG). Node
 prints an `ExperimentalWarning` for `node:sqlite`; it is expected. New install scripts
