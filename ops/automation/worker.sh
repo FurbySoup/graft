@@ -35,7 +35,8 @@ ALLOWED_TOOLS=(
   Read Edit Write Glob Grep TodoWrite
   "Bash(pnpm:*)" "Bash(npx tsc:*)" "Bash(npx vitest:*)" "Bash(npx eslint:*)"
   "Bash(python3 -m unittest:*)" "Bash(sidecars/calibrate/.venv/bin/python:*)"
-  "Bash(ops/automation/gate.sh:*)"
+  "Bash(ops/automation/gate.sh:*)" "Bash(ops/automation/dod.sh:*)"
+  "Bash(which:*)" "Bash(command -v:*)" "Bash(git config --get:*)"
   "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)"
   "Bash(git add:*)" "Bash(git commit:*)" "Bash(git restore:*)" "Bash(git rm:*)"
   "Bash(ls:*)" "Bash(cat:*)" "Bash(head:*)" "Bash(tail:*)" "Bash(wc:*)"
@@ -86,7 +87,7 @@ sys.stdout.write(t)
 # run_claude <worktree> <prompt-file> <transcript-file>: one headless attempt.
 run_claude() {
   local wt="$1" prompt_file="$2" transcript="$3"
-  ( cd "${wt}" && run_with_timeout "${CLAUDE_TIMEOUT}" "${CLAUDE_BIN}" -p "$(cat "${prompt_file}")" \
+  ( cd "${wt}" && GRAFT_DOD_CMD="${GRAFT_DOD_CMD:-}" run_with_timeout "${CLAUDE_TIMEOUT}" "${CLAUDE_BIN}" -p "$(cat "${prompt_file}")" \
       --permission-mode acceptEdits \
       --allowedTools "${ALLOWED_TOOLS[@]}" \
       --disallowedTools "${DISALLOWED_TOOLS[@]}" \
@@ -172,6 +173,7 @@ main() {
   fi
   local dod phase block
   dod="$(item_field "${backlog_snapshot}" "${item}" dod-cmd)"
+  export GRAFT_DOD_CMD="${dod}"
   phase="$(item_field "${backlog_snapshot}" "${item}" phase)"
   block="$(item_block "${backlog_snapshot}" "${item}")"
   if [[ "${dry_run}" == 1 ]]; then echo "${item}"; return 0; fi

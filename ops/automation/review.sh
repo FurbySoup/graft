@@ -81,7 +81,9 @@ $(tail -n 40 "${out_dir}/gate.txt")" > "${out_dir}/prompt.md"
   {
     echo "${MARKER_PREFIX}${head_sha} -->"
     if [[ -n "${verdict}" ]]; then
-      cat "${out_dir}/review.md"
+      # Verdict always leads the comment, wherever the model put it (answer first).
+      echo "${verdict}"
+      grep -v -m1000 -E '^Verdict: (looks-good|request-changes)' "${out_dir}/review.md" || true
     else
       echo "Verdict: request-changes"
       echo

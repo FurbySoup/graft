@@ -27,7 +27,17 @@ is green:
 {{DOD_CMD}}
 ```
 
-Run both yourself before you stop. Do not claim success in prose — the commands decide.
+Check both yourself before you stop, with exactly these two commands — each on its own,
+with no `export`/`PATH=` prefix, no `&&` chaining and no `$(…)` wrapping (the tool
+allow-list matches on the first word, so anything else is refused; `pnpm` is already on
+`PATH`):
+
+```
+ops/automation/dod.sh
+ops/automation/gate.sh
+```
+
+Do not claim success in prose — the commands decide.
 
 ## 4. Hard exclusions — never touch these paths
 

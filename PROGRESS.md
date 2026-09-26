@@ -62,3 +62,20 @@ red check, or a deviation from SPEC.
 - Exit criteria (SPEC §8, Phase 0.5): not evaluated — this item is one backlog task, not a phase gate.
 - Next action: continue Phase 0.5 backlog (P05-13 and onward per BACKLOG.md).
 - Blockers: none. Sandbox blocked running the `dod-cmd` Python/node predicate directly (no approval path in a non-interactive worker), but the two `-t` filters it reduces to were both run green, and the test-name template guarantees the predicate; the worker script re-runs the exact dod-cmd itself.
+
+## 2026-09-26 · Session 2 close-out · Phase 0.5
+**Answer:** Both SPEC §8 P0.5 exit criteria are ticked — [x] two backlog items completed unattended end-to-end with human merge (P05-11 → #6, P05-12 → #7) · [x] an impossible task hit the iteration cap and stopped cleanly (P05-RUNAWAY) — but the first runaway run was invalid (logged-out CLI) and headless sessions could not self-check their DoD until this close-out's fix.
+- Bad news first:
+  - The first runaway run (20260925T183359Z-54277) "hit the cap" in 32 s because the WSL `claude` CLI was not logged in; the worker counted crashes as attempts. Discarded; fixed by the auth preflight + infra-error path (#2). The valid run is 20260925T190134Z-109269.
+  - Both live sessions had every direct `pnpm`/DoD command refused (env-prefixed or chained commands don't match the first-word allow-list). The worker's own verification still ran and passed; sessions now self-check via `ops/automation/dod.sh` (this close-out, fd83c9b).
+  - Worker PRs that each append to PROGRESS.md conflict when merged in sequence (#6 needed a manual resolution after #7).
+  - Nightly runs depend on WSL being up at 00:00 (R-05).
+- Changed: #1 (P05 statuses), #2 (auth preflight, infra-error), #3 (project-wide pause), #4 (visitor README), #5 (runaway result), #6/#7 (first worker PRs, reviewed `looks-good`), and this close-out: dod.sh self-check, nvidia-smi on cron PATH, review verdict always first, Phase 1 readiness items R-01..R-05.
+- Exit criteria (SPEC §8, P0.5):
+  - [x] Two trivial items unattended branch → green → PR → auto-review → human merge: P05-11 (run 20260925T230001Z-121886, 1 attempt, PR #6, review looks-good at 00:15) and P05-12 (run 20260925T233001Z-125721, 1 attempt, PR #7, review looks-good at 00:45); both merged by Mark.
+  - [x] Runaway: P05-RUNAWAY, 5 real sessions (14–15 turns each) changed nothing outside PROGRESS notes; `status=blocked reason=iteration-cap attempts=5 exit=0`; `status: blocked` on `origin/auto/P05-RUNAWAY`; 0 PRs (P05-10).
+- cron: `*/30 0-6 * * *` worker.sh (hard kill `timeout 3h`) · `15,45 0-7 * * *` review.sh (`timeout 1h`) · Europe/London · installed via `ops/automation/install-cron.sh`; pause with `ops/scripts/graft pause` (auto-resume example: one-off cron line, 2026-09-25 23:58, fired and self-removed).
+- budget: ≤5 attempts/item · 1200 s wall clock per headless attempt · 7200 s per run (checked between attempts) · 900 s per review · one worker + one reviewer at a time (flock) · `claude -p` has no turn cap, so wall clock is the budget; weekly quota review is Mark's.
+- deviations: backlog is BACKLOG.md, not GitHub Issues · reviewer verdict is a PR comment, not a formal review (same account), and required approvals = 0 (the human gate is the merge click) · branch protection enforced for admins because the worker pushes as the owner account · hard exclusions extended to the automation's own guardrails (ops/automation, .claude, .github, root test/lint/TS configs, BACKLOG.md) · worker items require a machine-runnable `dod-cmd` · runs execute in git worktrees · added a project-wide pause (not in SPEC) · auth preflight + infra-error handling (not in SPEC).
+- Next action: Mark sets `current-phase: 1` in BACKLOG.md when ready; then an interactive session works R-01 → R-02 → R-03 → R-04 (all owner-only: dsh config, model pins, judge ADR) before any Phase 1 worker items run.
+- Blockers: none for the P0.5 gate. For Phase 1: R-01 (doer has <2K working context) and R-03 (judge confidence derivation) must land first.
