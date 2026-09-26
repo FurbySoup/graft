@@ -245,6 +245,24 @@ commit and marks the item `blocked`.
 - note: cron lives inside WSL; if WSL has shut down (no attached terminal) or the PC sleeps, nightly runs silently don't happen. Candidate: a Windows Task Scheduler task that launches the worker through `wsl.exe` (keeping WSL up for the run) with "wake to run" enabled.
 - dod: with every WSL window closed at 23:00, the next morning `data/automation/runs.log` has worker entries between 00:00 and 01:00 local time.
 
+### R-06 · Pin the doer's sampling parameters (temperature / top_p)
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-04
+- note: observed 2026-09-26 in Ollama's sampler log: every dsh request runs at `temp = 1.000, top_p = 1.000`. pi-ai sends no temperature, Ollama's OpenAI-compatible `/v1` then applies OpenAI defaults (overriding the Modelfile's 0.6/0.95), and dsh 0.1.5-rc.3 exposes no sampling config (dsh-llm-pi-ai has no `samplingParams` field; the agent loop has no temperature). Options to evaluate: an upstream/config path in a newer dsh; a Modelfile-level override that survives `/v1`; a localhost shim (least preferred — another moving part in the evidence chain). Until fixed, every episode samples at T=1.0 — record it in each experiment.
+- dod: Ollama's sampler log for a `graft` profile headless run shows the chosen temperature/top_p, AND `ops/VERSIONS.md` records the values, the mechanism, and why they were chosen.
+
+### R-07 · Doer tool-surface quirks observed after the R-01 trim
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-01
+- note: observed 2026-09-26 on toy and kata runs. (1) The doer's first `write` call often passes `sandbox_permissions` + `justification` (escalation fields on the `write`/`bash` schemas); headless has no approval answerer, so it fails closed and the doer retries without them — one wasted turn per episode, and a confound for turn/token metrics. (2) With `tool-jobs` disabled, the `bash` schema still advertises `run_in_background` ("collect with job_output") — a dangling reference. Investigate profile-level fixes (e.g. approval policy for headless, bash background option) without widening the sandbox.
+- dod: on the R-04 kata task, k=3 `graft` runs show no `sandbox_permissions` argument in any tool call AND no tool schema mentions `job_output`; `ops/VERSIONS.md` records the rows changed.
+
 ### P1-01 · Request Mark's approval for PyPI as a network target; pin sidecar deps
 - status: open
 - phase: 1

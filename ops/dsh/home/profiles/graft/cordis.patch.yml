@@ -104,11 +104,30 @@
         apiKeyEnv: GRAFT_OLLAMA_KEY
         api: openai-completions
         baseURL: http://localhost:11434/v1
+        # Thinking mode ON, sent explicitly as reasoning_effort "high" rather than left
+        # to Ollama's default (R-04, 2026-09-26: k=3 on the slugify kata — on 3/3 tier-1
+        # PASS; off ("none") 3/3 EMPTY_RESPONSE: with tools present the non-thinking
+        # output never reaches /v1). qwen3's thinking is a boolean; any non-"none"
+        # effort means on. System prompt stays in the `system` role (not `developer`).
+        reasoning: high
+        compat:
+          supportsReasoningEffort: true
+          supportsDeveloperRole: false
         models:
           - id: graft-doer:8k
             name: Graft doer
-            contextWindow: 8192
+            # NOT the real window. Ollama serves 8192 (num_ctx, graft-doer.Modelfile),
+            # but pi-ai 0.85.1 caps every request's output at
+            #   contextWindow − estimated prompt − 4096 (hard-coded CONTEXT_SAFETY_TOKENS),
+            # sized for 100K+ windows. Declaring 8192 left ~1.7K output after a 2K prompt,
+            # and 1 token at Phase 0's 6K prompt. 11264 = 8192 real − 1024 margin + 4096
+            # pi-ai reserve, so prompt + output ≤ 7168 real tokens. compaction-basic
+            # reads this figure too — its thresholdRatio below is set against it.
+            # (R-01, measured 2026-09-26; ops/VERSIONS.md)
+            contextWindow: 11264
             maxTokens: 4096
+            reasoningEfforts:
+              high: high
         retryPolicy:
           mode: normal
           maxRetries: 1
@@ -122,3 +141,11 @@
 - id: session-persistence-jsonl
   config:
     root: !!js process.env.GRAFT_REPO_ROOT + '/data/dsh-sessions'
+
+# ── Compaction: thresholds against the declared 11264 (see llm-pi-ai above) ────
+# Default 0.8 × 11264 = 9011 would exceed the real 8192 window. 0.5 × 11264 = 5632
+# estimated tokens, leaving ≥1536 output tokens (7168 − 5632) at the threshold,
+# including for the summarization request itself. retainRatio default 0.16 → 1802.
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.5
