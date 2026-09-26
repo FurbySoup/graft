@@ -45,6 +45,54 @@
 - id: agent-instructions
   disabled: true
 
+# ── Tool surface: file + shell tools only (R-01 context budget) ──────────────────
+# dsh-base ships 23 model-facing tools; their schemas plus the matching system-prompt
+# sections put the doer's FIRST request at 6,004 tokens of its 8,192 (measured
+# 2026-09-26 via Ollama's task.n_tokens), leaving <2K to work in. Graft episodes need
+# read/write/edit/glob/grep/bash only. Removed: agents (subagent*, list_agents,
+# send_message, interrupt_agent), orchestration (workflow, ralph, goals), background
+# jobs, todo, plan mode, the skill tool, and read_image (attachment store). The skill
+# tool is also a context-control issue: skills reach the doer only via graft-trust.
+# After: 6 tools, first request 2,043 tokens (ops/VERSIONS.md).
+- id: tool-jobs
+  disabled: true
+- id: tool-skill
+  disabled: true
+- id: goal
+  disabled: true
+- id: goal-round-driver
+  disabled: true
+- id: command-goal
+  disabled: true
+- id: tool-goal
+  disabled: true
+- id: tool-ralph
+  disabled: true
+- id: plan-mode
+  disabled: true
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: workflow-worker-thread
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: tool-todo
+  disabled: true
+- id: attachment-local
+  disabled: true
+
 # ── Model: local Ollama via its OpenAI-compatible endpoint ─────────────────────
 - id: llm-pi-ai
   config:

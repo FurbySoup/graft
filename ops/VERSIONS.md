@@ -62,6 +62,7 @@ RISK-REGISTER review.
 | `agent-default-model` | `deepseek-official` / `deepseek-flash` | `ollama-local` / `graft-doer:8k` | Local doer |
 | `llm-pi-ai` | dormant | one route `ollama-local` → `http://localhost:11434/v1`, `openai-completions`, `apiKeyEnv: GRAFT_OLLAMA_KEY` | pi-ai refuses keyless routes (`No API key for provider`); the key is a fixed non-secret placeholder — Ollama on localhost has no auth |
 | `session-persistence-jsonl` root | `$DSH_HOME/sessions` | `data/dsh-sessions` (gitignored) | Durable data out of the config tree |
+| Model-facing tools (19 rows: `tool-jobs`, `tool-skill`, `goal`, `goal-round-driver`, `command-goal`, `tool-goal`, `tool-ralph`, `plan-mode`, `subagent`, `subagent-spawn-in-process`, `subagent-fork-in-process`, `tool-subagent-control`, `tool-subagent-list-agents`, `tool-subagent`, `tool-subagent-fork`, `workflow-worker-thread`, `tool-workflow`, `tool-todo`, `attachment-local`) | mounted: 23 tools | **disabled**: 6 tools remain (`bash`, `read`, `write`, `edit`, `glob`, `grep`) | R-01 context budget — see *Doer context budget* below. `tool-skill` is also context control: skills reach the doer only via graft-trust |
 | sandbox / approval | `workspace-write` + `ask` | unchanged | Kept; the headless smoke completed under it |
 
 ### Profile hashes (drift check — `sha256sum`)
@@ -127,9 +128,29 @@ responses in `data/smoke/`):
 qwen3:8b residency by `num_ctx`: 8192 → 100% GPU (~47 tok/s) · 16384 → 20% CPU (23.5
 tok/s) · 32768 → 41% CPU (16.5 tok/s). dsh calls Ollama's `/v1` endpoint, which cannot
 pass `num_ctx` and loaded at **4096** by default — hence the derived `graft-doer:8k`.
-**Consequence:** dsh's fixed prompt (system + tool schemas + runtime context) measured
-~6.0–6.6K tokens, leaving <2K for work; the smoke session compacted 7 times. Context
-budget is a Phase 1 constraint.
+**Consequence (Phase 0):** dsh's fixed prompt (system + tool schemas + runtime context)
+measured ~6.0–6.6K tokens, leaving <2K for work; the smoke session compacted 7 times.
+**Resolved by R-01** (below): first request now 2,043 tokens.
+
+### Doer context budget (R-01, 2026-09-26)
+
+**The doer's first request now costs 2,043 of 8,192 tokens (was 6,004), leaving ~6.1K
+of working context.** Measured from Ollama's own `task.n_tokens` log line (journald) on
+the same toy task (`"Create a file named answer.txt containing the text 42."`, run from
+`data/smoke/r01-ws`), and cross-checked by capturing the request body through a
+localhost logging proxy (`--patch` overlay; not committed):
+
+| | Tools | Tool-schema chars | System-prompt chars | First request `task.n_tokens` | Requests in session |
+|---|---|---|---|---|---|
+| Before (Phase 0 profile) | 23 | 26,074 | 3,801 | **6,004** | 6,004 · 6,199 · 6,518 · 6,281 · 6,985 |
+| After (19 rows disabled) | 6 | 7,789 | 1,558 | **2,043** | 2,043 · 2,242 · 2,536 · 3,133 |
+
+Both runs exited 0 with `answer.txt` = `42`. The biggest single costs removed were the
+`workflow` (4.2K chars), `subagent*` (2.8K), `list_agents`/`send_message`/`interrupt_agent`
+(3.0K), goal tools (2.4K) and `todo_write` (1.4K) schemas, plus their system-prompt
+sections. The remaining floor is dominated by the `bash` schema (3.4K chars).
+`graft-replay` (sdk-minimal) was not re-measured: it has no one-shot CLI, so its prompt
+size is measured when Phase 2's SDK replay driver exists.
 
 ### Smoke tests (2026-09-25)
 
