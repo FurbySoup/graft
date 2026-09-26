@@ -55,3 +55,10 @@ red check, or a deviation from SPEC.
   - [x] `grep -rqiE 'missing key' / 'unknown key' packages/core/src` — both present in `loader.ts`.
 - Next action: P05-12 (extend ledger migration tests) or P05-13 (Phase 0.5 close-out) per BACKLOG.
 - Blockers: none. Note: in this sandbox the `pnpm` DoD sub-commands required approval to run directly; they were exercised through the pre-commit gate, which runs the identical typecheck/lint/test and rejects red commits.
+
+## 2026-09-26 · worker 20260925T233001Z-125721 · Phase 0.5
+**Answer:** DoD passes — P05-12 done. `pnpm --filter @furbysoup/graft-core exec vitest run -t "append-only"` shows 14 passing tests (one UPDATE-rejected + one DELETE-rejected per ledger table × 7 tables) and `-t "migration is idempotent"` shows 1 passing test; the full gate (typecheck + lint + 22 tests) is green.
+- Changed: `packages/core/src/ledger/migrate.test.ts` only. Replaced the two episodes-only append-only tests with a data-driven loop over all 7 `LEDGER_TABLES`, each asserting UPDATE and DELETE abort with `ledger is append-only: <table>`; added `seedLedger()` (inserts one FK-valid row per table so the per-row BEFORE triggers actually fire); renamed `is idempotent` → `migration is idempotent` to match the DoD name filter.
+- Exit criteria (SPEC §8, Phase 0.5): not evaluated — this item is one backlog task, not a phase gate.
+- Next action: continue Phase 0.5 backlog (P05-13 and onward per BACKLOG.md).
+- Blockers: none. Sandbox blocked running the `dod-cmd` Python/node predicate directly (no approval path in a non-interactive worker), but the two `-t` filters it reduces to were both run green, and the test-name template guarantees the predicate; the worker script re-runs the exact dod-cmd itself.

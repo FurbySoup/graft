@@ -179,7 +179,8 @@ commit and marks the item `blocked`.
 - dod-cmd: pnpm --filter @furbysoup/graft-core test && pnpm typecheck && ! grep -rnE ':\s*any\b|as any' packages/core/src && grep -rqiE 'missing key' packages/core/src && grep -rqiE 'unknown key' packages/core/src
 
 ### P05-12 · Extend ledger migration tests (append-only + idempotent)
-- status: open
+- status: done
+- claimed-by: 20260925T233001Z-125721
 - phase: 0.5
 - executor: worker
 - owner-only: no

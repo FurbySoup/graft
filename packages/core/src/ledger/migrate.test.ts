@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LEDGER_TABLES, migrate, openLedger } from '../index.js';
-import type { EpisodeRow, InjectionRow } from '../index.js';
+import type { EpisodeRow, InjectionRow, LedgerTable } from '../index.js';
 
 const episode: EpisodeRow = {
   id: 'ep-1',
@@ -46,6 +46,53 @@ function tableNames(db: DatabaseSync): string[] {
     .map((r) => String(r['name']));
 }
 
+/**
+ * Insert one valid row into every ledger table, respecting foreign keys, so
+ * that BEFORE UPDATE / BEFORE DELETE triggers have a row to fire on. (An
+ * UPDATE/DELETE matching zero rows would fire no trigger and vacuously "pass".)
+ */
+function seedLedger(db: DatabaseSync): void {
+  insertEpisode(db, episode);
+  db.prepare(
+    'INSERT INTO injections (episode_id, skill_id, version, section_id) VALUES (?, ?, ?, ?)',
+  ).run('ep-1', 'skill-a', 'abc123', 'S1');
+  db.prepare(
+    'INSERT INTO verdicts (id, episode_id, tier, verdict, raw_conf, p_correct, judge_model) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run('v-1', 'ep-1', 2, 'pass', 0.9, 0.8, 'phi4-mini');
+  db.prepare(
+    'INSERT INTO blames (verdict_id, section_id, quote, quote_validated) VALUES (?, ?, ?, ?)',
+  ).run('v-1', 'S1', 'a quoted trace line', 1);
+  db.prepare('INSERT INTO outcomes (episode_id, source, label, ts) VALUES (?, ?, ?, ?)').run(
+    'ep-1',
+    'judge',
+    'pass',
+    '2026-09-25T00:00:00.000Z',
+  );
+  db.prepare('INSERT INTO calib_log (ts, context, raw_conf, outcome) VALUES (?, ?, ?, ?)').run(
+    '2026-09-25T00:00:00.000Z',
+    'judge',
+    0.9,
+    1,
+  );
+  db.prepare(
+    'INSERT INTO merges (ts, skill_id, from_sha, to_sha, stats_verdict_ref, reverted) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run('2026-09-25T00:00:00.000Z', 'skill-a', 'aaa111', 'bbb222', 'stats-1', 0);
+}
+
+/**
+ * Per-table append-only fixtures. `selfUpdate` is a no-op assignment (col = col)
+ * so the UPDATE is otherwise valid — only the trigger should abort it.
+ */
+const APPEND_ONLY_TABLES: ReadonlyArray<{ readonly table: LedgerTable; readonly selfUpdate: string }> = [
+  { table: 'episodes', selfUpdate: 'session_id = session_id' },
+  { table: 'injections', selfUpdate: 'skill_id = skill_id' },
+  { table: 'verdicts', selfUpdate: 'tier = tier' },
+  { table: 'blames', selfUpdate: 'quote = quote' },
+  { table: 'outcomes', selfUpdate: 'label = label' },
+  { table: 'calib_log', selfUpdate: 'context = context' },
+  { table: 'merges', selfUpdate: 'skill_id = skill_id' },
+];
+
 describe('ledger migrations', () => {
   let db: DatabaseSync;
 
@@ -64,7 +111,7 @@ describe('ledger migrations', () => {
     expect(LEDGER_TABLES).toHaveLength(7);
   });
 
-  it('is idempotent', () => {
+  it('migration is idempotent', () => {
     const fresh = new DatabaseSync(':memory:');
     try {
       expect(migrate(fresh).applied).toEqual([1]);
@@ -93,19 +140,19 @@ describe('ledger migrations', () => {
     ).toThrow(/FOREIGN KEY/);
   });
 
-  it('rejects UPDATE (append-only)', () => {
-    insertEpisode(db, episode);
-    expect(() => db.exec("UPDATE episodes SET outcome_final = 'pass' WHERE id = 'ep-1'")).toThrow(
-      'ledger is append-only: episodes',
-    );
-  });
+  for (const { table, selfUpdate } of APPEND_ONLY_TABLES) {
+    it(`rejects UPDATE on ${table} (append-only)`, () => {
+      seedLedger(db);
+      expect(() => db.exec(`UPDATE ${table} SET ${selfUpdate}`)).toThrow(
+        `ledger is append-only: ${table}`,
+      );
+    });
 
-  it('rejects DELETE (append-only)', () => {
-    insertEpisode(db, episode);
-    expect(() => db.exec("DELETE FROM episodes WHERE id = 'ep-1'")).toThrow(
-      'ledger is append-only: episodes',
-    );
-  });
+    it(`rejects DELETE on ${table} (append-only)`, () => {
+      seedLedger(db);
+      expect(() => db.exec(`DELETE FROM ${table}`)).toThrow(`ledger is append-only: ${table}`);
+    });
+  }
 
   it('rejects an invalid outcome source', () => {
     insertEpisode(db, episode);
