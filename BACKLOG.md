@@ -189,7 +189,7 @@ commit and marks the item `blocked`.
 - dod-cmd: o=$(mktemp) && pnpm --filter @furbysoup/graft-core exec vitest run --reporter=json --outputFile="$o" && python3 -c "import json,sys; n=[a['fullName'] for r in json.load(open(sys.argv[1]))['testResults'] for a in r['assertionResults'] if a['status']=='passed']; t='episodes injections verdicts blames outcomes calib_log merges'.split(); ok=all(any(x in m and op in m and 'append-only' in m for m in n) for x in t for op in ('UPDATE','DELETE')) and any('migration is idempotent' in m for m in n); sys.exit(0 if ok else 1)" "$o"
 
 ### P05-13 · Phase 0.5 close-out
-- status: open
+- status: done
 - phase: 0.5
 - executor: session
 - owner-only: no
@@ -199,6 +199,51 @@ commit and marks the item `blocked`.
 ---
 
 ## Phase 1 — Observation mode (SPEC §8 P1). No gating, no skill edits.
+
+### R-01 · Doer context budget: free ≥4K tokens of working context
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: —
+- note: Phase 0 measured dsh's fixed prompt at ~6–6.6K of graft-doer's 8,192 tokens (<2K left; 7 compactions on a toy task). Touches dsh config (hard exclusion). Trim unused tool/plugin rows from the `graft` profile first; if that can't reach the target, write an ADR revisiting ADR-0001 before Phase 1 episodes run.
+- dod: Ollama's log for a `graft` profile headless run shows `task.n_tokens` ≤ 4096 for the first request AND `ops/VERSIONS.md` records the rows changed and the measured before/after prompt size.
+
+### R-02 · Pin judge and embeddings to CPU with committed Modelfiles
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: —
+- note: observed 2026-09-25: qwen3-embedding:0.6b loads 2.2 GiB fully into VRAM by default; SPEC §5 requires judge and embeddings on CPU (doer is the sole VRAM resident).
+- dod: `ops/models/graft-judge.Modelfile` and `ops/models/graft-embed.Modelfile` set `num_gpu 0`; after loading each, `curl -s localhost:11434/api/ps` reports `size_vram` 0 for both; `ops/VERSIONS.md` records their digests.
+
+### R-03 · ADR: how tier-2 judge confidence (`raw_conf`) is derived
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-02
+- note: Ollama logprobs are pre-grammar-mask: in the Phase 0 smoke the sampled in-schema verdict token had p≈0.0001 while the model's top token was `incorrect`. Compare ≥2 derivations (e.g. per-option likelihood scoring; reasoning-before-verdict field order) on a small hand-labelled set.
+- dod: `docs/decisions/ADR-*-judge-confidence.md` with `Status: Accepted`, a results table over ≥20 labelled artifacts per candidate method, and the chosen method named.
+
+### R-04 · Pin the doer's thinking-mode setting
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-01
+- note: qwen3 thinking is on by default via `/v1`; reasoning arrives in a separate field and tight caps return empty content (a pitfall Skill Tree also paid for).
+- dod: `ops/VERSIONS.md` records the chosen setting with a k≥3 on/off comparison on the kata smoke task (tokens used, content non-empty, tier-1 pass), and the `graft` profile / Modelfile enforces it.
+
+### R-05 · Keep overnight runs alive independent of an open WSL window
+- status: open
+- phase: 1
+- executor: human
+- owner-only: yes
+- depends: —
+- note: cron lives inside WSL; if WSL has shut down (no attached terminal) or the PC sleeps, nightly runs silently don't happen. Candidate: a Windows Task Scheduler task that launches the worker through `wsl.exe` (keeping WSL up for the run) with "wake to run" enabled.
+- dod: with every WSL window closed at 23:00, the next morning `data/automation/runs.log` has worker entries between 00:00 and 01:00 local time.
 
 ### P1-01 · Request Mark's approval for PyPI as a network target; pin sidecar deps
 - status: open
