@@ -102,9 +102,10 @@ run_e2e() { # run_e2e <label> ; env passed through
 }
 
 # (a) green: stub writes a file the DoD checks for, and commits it
-mkstub claude-green 'printf "export const e2e = 1;\n" > packages/core/src/e2e.ts; git add -A; git commit -q -m "feat(core): e2e"; echo "{}"'
+mkstub claude-green "printf 'export const e2e = 1;\\n' > packages/core/src/e2e.ts; ops/automation/dod.sh > '${tmp}/session-dod.txt' 2>&1; git add -A; git commit -q -m 'feat(core): e2e'; echo '{}'"
 e2e_backlog 'test -f packages/core/src/e2e.ts'
 CLAUDE_BIN="${tmp}/claude-green" WORKER_MAX_ATTEMPTS=2 run_e2e green >/dev/null 2>&1
+check "e2e green: session could self-check via dod.sh" grep -q 'DoD command exited 0' "${tmp}/session-dod.txt"
 check "e2e green: success logged with exit=0" grep -qE 'item=E-01 event=end status=success .*exit=0' "${tmp}/e2e-green/runs.log"
 check "e2e green: item marked done on branch" bash -c "git -C '${clone}' show auto/E-01:BACKLOG.md | grep -A1 'E-01 ·' | grep -q 'status: done'"
 check "e2e green: claim then done commits present" bash -c "git -C '${clone}' log --format=%s main..auto/E-01 | grep -q 'claim E-01' && git -C '${clone}' log --format=%s main..auto/E-01 | grep -q 'E-01 done'"

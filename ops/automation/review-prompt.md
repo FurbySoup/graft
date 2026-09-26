@@ -37,7 +37,7 @@ anything.
 
 ## Output — exactly this shape (it is posted verbatim as a PR comment)
 
-First line, one of:
+The very first line of your reply must be exactly one of these (no preamble before it):
 
     Verdict: looks-good
     Verdict: request-changes

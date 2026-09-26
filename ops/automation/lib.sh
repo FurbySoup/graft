@@ -12,7 +12,8 @@ PAUSE_FLAG="${PAUSE_FLAG:-${AUTOMATION_DIR}/pause}"
 EXCLUSIONS_FILE="${EXCLUSIONS_FILE:-${AUTOMATION_DIR}/exclusions.txt}"
 
 # cron has a minimal PATH; pnpm lives in a corepack shim under ~/.local/bin.
-export PATH="${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# /usr/lib/wsl/lib holds nvidia-smi under WSL; cron's PATH omits it.
+export PATH="${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/lib/wsl/lib:${PATH:-}"
 
 # log <run_id> <item_id> <event> [key=value ...]
 # One line per event: ISO-8601 UTC timestamp, then space-separated key=value pairs.
