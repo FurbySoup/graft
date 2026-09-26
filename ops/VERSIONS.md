@@ -71,8 +71,10 @@ RISK-REGISTER review.
 a9bd8127d91367249b6ce66ca6bf32c3e5196fe0f279234e3f240e5419916505  ops/presets/graft-replay/package.json
 03d68ba5b34db6d4da4fe1b370f8f6174b684a200edd965490b87626fe56fc0e  ops/presets/graft-replay/cordis.patch.yml
 c300dcf2ebc5f02062d6591268d29d3db6fe45e0cb138f5467276fe2ba06076e  ops/presets/graft-replay/cordis.yml
-a3a84715bb3480cbd3a5886b59b0ade7d7586d1352af13d6ee7a5a40275d7461  ops/dsh/home/profiles/graft/cordis.patch.yml
+6cca69e1a228ede0e039a12b1cd3475fbf4d1ec6efe2647da2579286fc44c98f  ops/dsh/home/profiles/graft/cordis.patch.yml
 47c6e11dc493f6016ba9b30ebf421821288db1e7348f0035f7b11d9aac86e974  ops/models/graft-doer.Modelfile
+9a30e540c2894331c255ea5c039ec2ed3068a3271fd89a188ce69ebc5d7b8555  ops/models/graft-judge.Modelfile
+3f800c832fff9a235e2c7968d06fd27488817c7c8f09b1b6dd6a62ca5b623ce5  ops/models/graft-embed.Modelfile
 ```
 
 ## Ollama
@@ -191,6 +193,10 @@ template renders it back into the prompt was **not** measured — check before t
 context-budget arithmetic on multi-turn episodes. Enforcement: `llm-pi-ai` route `reasoning: high`,
 `compat.supportsReasoningEffort: true`, `supportsDeveloperRole: false` (keep `system`),
 model `reasoningEfforts: {high: high}`.
+Verified on the committed profile (2026-09-26, same kata, proxy overlay swapping only
+`baseURL`): exit 0, tier-1 PASS, 83 s; `reasoning_effort: "high"` on all 3 requests;
+`max_completion_tokens` 4096 → 3218 → 2910; Ollama `task.n_tokens` 2211 · 3729 · 4104;
+sampler `temp = 1.000` (R-06 open).
 
 ### Smoke tests (2026-09-25)
 

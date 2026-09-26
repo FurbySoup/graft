@@ -201,7 +201,7 @@ commit and marks the item `blocked`.
 ## Phase 1 — Observation mode (SPEC §8 P1). No gating, no skill edits.
 
 ### R-01 · Doer context budget: free ≥4K tokens of working context
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -210,7 +210,7 @@ commit and marks the item `blocked`.
 - dod: Ollama's log for a `graft` profile headless run shows `task.n_tokens` ≤ 4096 for the first request AND `ops/VERSIONS.md` records the rows changed and the measured before/after prompt size.
 
 ### R-02 · Pin judge and embeddings to CPU with committed Modelfiles
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -220,15 +220,16 @@ commit and marks the item `blocked`.
 
 ### R-03 · ADR: how tier-2 judge confidence (`raw_conf`) is derived
 - status: open
+- progress: 2026-09-26 — `docs/decisions/0002-judge-confidence.md` is **Proposed** with the ≥20-item results table; no method is chosen because the judge is at chance (AUROC 0.44–0.56) under every derivation. Awaiting Mark: accept/amend.
 - phase: 1
 - executor: session
 - owner-only: yes
 - depends: R-02
 - note: Ollama logprobs are pre-grammar-mask: in the Phase 0 smoke the sampled in-schema verdict token had p≈0.0001 while the model's top token was `incorrect`. Compare ≥2 derivations (e.g. per-option likelihood scoring; reasoning-before-verdict field order) on a small hand-labelled set.
-- dod: `docs/decisions/ADR-*-judge-confidence.md` with `Status: Accepted`, a results table over ≥20 labelled artifacts per candidate method, and the chosen method named.
+- dod: `docs/decisions/*-judge-confidence.md` with `Status: Accepted`, a results table over ≥20 labelled artifacts per candidate method, and the chosen method named.
 
 ### R-04 · Pin the doer's thinking-mode setting
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -262,6 +263,15 @@ commit and marks the item `blocked`.
 - depends: R-01
 - note: observed 2026-09-26 on toy and kata runs. (1) The doer's first `write` call often passes `sandbox_permissions` + `justification` (escalation fields on the `write`/`bash` schemas); headless has no approval answerer, so it fails closed and the doer retries without them — one wasted turn per episode, and a confound for turn/token metrics. (2) With `tool-jobs` disabled, the `bash` schema still advertises `run_in_background` ("collect with job_output") — a dangling reference. Investigate profile-level fixes (e.g. approval policy for headless, bash background option) without widening the sandbox.
 - dod: on the R-04 kata task, k=3 `graft` runs show no `sandbox_permissions` argument in any tool call AND no tool schema mentions `job_output`; `ops/VERSIONS.md` records the rows changed.
+
+### R-08 · Evaluate a stronger CPU-resident, non-Qwen judge
+- status: open
+- phase: pre-P3
+- executor: session
+- owner-only: yes
+- depends: R-03
+- note: ADR-0002 (proposed): phi4-mini scored AUROC 0.44–0.56 (chance) on the 24-item judge-confidence set under all five `raw_conf` derivations. Re-run `ops/experiments/judge-confidence/eval.py --model <candidate>` for ≥1 larger decorrelated (non-Qwen) model that fits CPU/RAM, plus judged-domain data once D-01 exists. Models are pulled serially; record digests in `ops/VERSIONS.md`.
+- dod: an ADR records the judge model for P3 with an AUROC table over ≥2 models on the same dataset, `Status: Accepted`.
 
 ### P1-01 · Request Mark's approval for PyPI as a network target; pin sidecar deps
 - status: open
@@ -356,7 +366,7 @@ commit and marks the item `blocked`.
 - executor: session
 - owner-only: yes
 - depends: —
-- dod: `docs/decisions/ADR-*-kata-generator.md` exists AND contains `## Decision`, `## Alternatives` and the word `leakage`, i.e. the SPEC §11 risk that the doer's own model family writes the tests.
+- dod: `docs/decisions/*-kata-generator.md` exists AND contains `## Decision`, `## Alternatives` and the word `leakage`, i.e. the SPEC §11 risk that the doer's own model family writes the tests.
 
 ### P1-12 · Kata generator ops/scripts/gen-kata (per ADR)
 - status: open
@@ -438,7 +448,7 @@ commit and marks the item `blocked`.
 - executor: session
 - owner-only: yes
 - depends: P1-18
-- dod: `docs/decisions/ADR-*-tracker-form.md` exists. It must contain `## Decision`, `## Alternatives` (at least 2 considered), a section confirming it is read-only, offline and deterministic, and a reference to the ledger data it was decided on (episode count or IDs). The item must not assume any technology beforehand (CLAUDE.md principle 7).
+- dod: `docs/decisions/*-tracker-form.md` exists. It must contain `## Decision`, `## Alternatives` (at least 2 considered), a section confirming it is read-only, offline and deterministic, and a reference to the ledger data it was decided on (episode count or IDs). The item must not assume any technology beforehand (CLAUDE.md principle 7).
 
 ### P1-22 · Tracker v0 (graft-dash) per the ADR
 - status: open
@@ -469,7 +479,7 @@ commit and marks the item `blocked`.
 - depends: —
 - trigger: before any backlog item, canary, skill or episode fixture draws on Mark's personal productivity work (including if D-01 picks such a second domain) — whichever comes first
 - note: the repo went public 2026-09-25 (Phase 0.5) so branch protection works on the Free plan. That was chosen while all content is synthetic katas and project docs. Personal task content, ledger exports or episode fixtures change that trade-off.
-- dod: `docs/decisions/ADR-*-repo-visibility.md` exists with `Status: Accepted`, and it records the decision (stay public / go private / split private data repo) with the branch-protection consequence stated. AND `gh repo view FurbySoup/graft --json visibility --jq .visibility` matches the ADR.
+- dod: `docs/decisions/*-repo-visibility.md` exists with `Status: Accepted`, and it records the decision (stay public / go private / split private data repo) with the branch-protection consequence stated. AND `gh repo view FurbySoup/graft --json visibility --jq .visibility` matches the ADR.
 
 ### D-01 · Choose the second (judge) domain
 - status: open
@@ -477,4 +487,4 @@ commit and marks the item `blocked`.
 - executor: human
 - owner-only: yes
 - depends: P1-23
-- dod: `docs/decisions/ADR-*-second-domain.md` exists with `Status: Accepted`. It must contain a scoring table that rates at least 2 candidates against all five SPEC §7 criteria (deterministic verifiability, instance volume, difficulty gradient, value to Mark, offline safety), with evidence cited per score. It must be merged before any P3 item is opened.
+- dod: `docs/decisions/*-second-domain.md` exists with `Status: Accepted`. It must contain a scoring table that rates at least 2 candidates against all five SPEC §7 criteria (deterministic verifiability, instance volume, difficulty gradient, value to Mark, offline safety), with evidence cited per score. It must be merged before any P3 item is opened.
