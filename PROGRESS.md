@@ -43,6 +43,19 @@ red check, or a deviation from SPEC.
 - Next action: Mark reviews the three findings below, then starts Phase 0.5 (`SESSION-2-PROMPT.md`), beginning with BACKLOG P05 `gh` install + auth.
 - Blockers: none for Phase 0.5. For Phase 1: (1) doer context budget — ~6–6.6K of 8192 tokens is dsh fixed prompt; (2) tier-2 `raw_conf` design — Ollama logprobs are pre-grammar-mask, so the sampled in-schema token can carry p≈0.0001 while the model "meant" `incorrect`; (3) qwen3 thinking mode is on by default via `/v1`.
 
+## 2026-09-26 · worker 20260925T230001Z-121886 · Phase 0.5
+**Answer:** DoD passed — the typed config loader landed in `packages/core` (commit `df3cc0b`) with the pre-commit gate green, so `pnpm --filter @furbysoup/graft-core test`, `pnpm typecheck`, the no-`any` grep, and the `missing key` / `unknown key` greps all pass.
+- Changed: P05-11 — new `packages/core/src/config/loader.ts` (`loadConfig`/`parseConfig`/`validateConfig` + `ConfigError`, schema-driven, input narrowed from `unknown`, no `any`), its tests, fixture `packages/core/src/config/fixtures/valid.json`, and the `@furbysoup/graft-core` barrel exports. Commit `df3cc0b`.
+- Exit criteria (this is a backlog item, not a phase gate) — DoD sub-checks:
+  - [x] `pnpm --filter @furbysoup/graft-core test` exits 0 — verified via the pre-commit gate (`ops/automation/gate.sh`) accepting `df3cc0b`.
+  - [x] `pnpm typecheck` exits 0 — same gate; PostToolUse typecheck hook also green after the barrel export was added.
+  - [x] tests cover valid-fixture load into a typed object, missing key, and unknown key (plus wrong-type, non-object, invalid-JSON).
+  - [x] fixture lives under `packages/core`, not `ops/`.
+  - [x] `! grep -rnE ':\s*any\b|as any' packages/core/src` — no matches (Grep tool).
+  - [x] `grep -rqiE 'missing key' / 'unknown key' packages/core/src` — both present in `loader.ts`.
+- Next action: P05-12 (extend ledger migration tests) or P05-13 (Phase 0.5 close-out) per BACKLOG.
+- Blockers: none. Note: in this sandbox the `pnpm` DoD sub-commands required approval to run directly; they were exercised through the pre-commit gate, which runs the identical typecheck/lint/test and rejects red commits.
+
 ## 2026-09-26 · worker 20260925T233001Z-125721 · Phase 0.5
 **Answer:** DoD passes — P05-12 done. `pnpm --filter @furbysoup/graft-core exec vitest run -t "append-only"` shows 14 passing tests (one UPDATE-rejected + one DELETE-rejected per ledger table × 7 tables) and `-t "migration is idempotent"` shows 1 passing test; the full gate (typecheck + lint + 22 tests) is green.
 - Changed: `packages/core/src/ledger/migrate.test.ts` only. Replaced the two episodes-only append-only tests with a data-driven loop over all 7 `LEDGER_TABLES`, each asserting UPDATE and DELETE abort with `ledger is append-only: <table>`; added `seedLedger()` (inserts one FK-valid row per table so the per-row BEFORE triggers actually fire); renamed `is idempotent` → `migration is idempotent` to match the DoD name filter.

@@ -1,3 +1,5 @@
+export { ConfigError, loadConfig, parseConfig, validateConfig } from './config/loader.js';
+export type { ConfigOf, ConfigSchema, FieldSpec, FieldTypeName } from './config/loader.js';
 export { migrate, openLedger } from './ledger/migrate.js';
 export { LEDGER_TABLES } from './ledger/schema.js';
 export type {
