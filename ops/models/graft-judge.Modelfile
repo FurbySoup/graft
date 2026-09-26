@@ -1,0 +1,8 @@
+# Graft judge — phi4-mini pinned to CPU/RAM (SPEC §5: the doer is the sole VRAM
+# resident; the judge is a decorrelated family and runs on CPU). num_gpu 0 offloads
+# zero layers, so Ollama loads it entirely into system RAM even when VRAM is free.
+# Recreate with:
+#   ollama create graft-judge:cpu -f ops/models/graft-judge.Modelfile
+# Base digest is pinned in ops/VERSIONS.md; the FROM tag must resolve to it.
+FROM phi4-mini
+PARAMETER num_gpu 0

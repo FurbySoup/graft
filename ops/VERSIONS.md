@@ -90,7 +90,19 @@ a3a84715bb3480cbd3a5886b59b0ade7d7586d1352af13d6ee7a5a40275d7461  ops/dsh/home/p
 | Doer base | `qwen3:8b` | `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41` | qwen3, 8.2B, Q4_K_M, text-only (5.23 GB blob) |
 | Judge v1 | `phi4-mini:latest` | `78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753` | phi3 family, 3.8B, Q4_K_M — decorrelated from Qwen |
 | Embeddings | `qwen3-embedding:0.6b` | `ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d` | 596M, Q8_0, 1024-dim |
+| **Judge** | `graft-judge:cpu` | `1feee68b0fadd71003fb33f1bd6e73d6e9e0295e54e273ced3a805bfeafa967b` | `ops/models/graft-judge.Modelfile`: `FROM phi4-mini` + `num_gpu 0` (CPU-only) |
+| **Embeddings** | `graft-embed:cpu` | `bf6e5ca4e70665a6d8a81145030b7eeeae658e75b2aff32ff3a55f51607163c9` | `ops/models/graft-embed.Modelfile`: `FROM qwen3-embedding:0.6b` + `num_gpu 0` (CPU-only) |
 | (rejected) | `qwen3.5:9b` | `6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7` | Still pulled (6.6 GB) for re-evaluation; not used |
+
+### CPU pins: judge and embeddings (R-02, 2026-09-26)
+
+The stock `qwen3-embedding:0.6b` loads 2.2 GiB fully into VRAM by default, and nothing
+stopped `phi4-mini` doing the same; SPEC §5 makes the doer the sole VRAM resident. The
+derived `:cpu` tags bake in `num_gpu 0`, so placement no longer depends on each caller
+passing an option. **Use `graft-judge:cpu` and `graft-embed:cpu`, never the base tags.**
+Verified after loading both: `/api/ps` → `graft-judge:cpu` size 3.09 GB `size_vram` 0;
+`graft-embed:cpu` size 2.37 GB `size_vram` 0; `nvidia-smi` unchanged at 1632 MiB (Windows
+baseline); embed dim 1024.
 
 ### Substitution: doer `qwen3.5:9b` → `qwen3:8b` (as `graft-doer:8k`)
 
