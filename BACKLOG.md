@@ -267,7 +267,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: —
-- dod: `ops/scripts/ledger-sql "SELECT 1 AS x"` prints `[{"x":1}]`. AND a test shows `ops/scripts/ledger-sql "INSERT INTO episodes DEFAULT VALUES"` exits non-zero, because the DB is opened read-only.
+- dod: `ops/scripts/ledger-sql --db <migrated.sqlite> "SELECT 1 AS x"` prints `[{"x":1}]` (default `--db` is `data/ledger.sqlite`). Tests named `ledger-sql prints rows as JSON` and `ledger-sql rejects writes` (the latter runs `INSERT INTO episodes DEFAULT VALUES` and asserts a non-zero exit, because the DB is opened read-only) pass.
+- dod-cmd: test -x ops/scripts/ledger-sql && ops/automation/require-tests.sh "ledger-sql prints rows as JSON" "ledger-sql rejects writes"
 
 ### P1-04 · graft-ledger: project a dsh session stream into SQLite
 - status: open
@@ -276,6 +277,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P1-02
 - dod: `pnpm --filter @furbysoup/graft-ledger test` exits 0. Tests must be named `projects fixture session into episodes` and `re-projecting the same session adds no rows`. The dsh format parsing lives in the plugin; the row mapping lives in `packages/core`. `grep -rl "dsh\|cordis" packages/core/src` returns nothing.
+- dod-cmd: ops/automation/require-tests.sh "projects fixture session into episodes" "re-projecting the same session adds no rows" && ! grep -rlE "dsh|cordis" packages/core/src
 
 ### P1-05 · graft-trust: registry.yaml reader (read-only)
 - status: open
@@ -283,7 +285,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: —
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "registry"` passes. Tests must cover: parsing a fixture registry; rejecting an unknown `state`; and `grep -rnE 'writeFile|appendFile' packages/core/src/registry` returning nothing. Fixtures live under `packages/core`, never `skills/`.
+- dod: tests named `registry parses a fixture registry` and `registry rejects an unknown state` pass; fixtures live under `packages/core`, never `skills/`; `grep -rnE 'writeFile|appendFile' packages/core/src/registry` returns nothing.
+- dod-cmd: ops/automation/require-tests.sh "registry parses a fixture registry" "registry rejects an unknown state" && test -d packages/core/src/registry && ! grep -rnE "writeFile|appendFile" packages/core/src/registry
 
 ### P1-06 · graft-trust: injection logging (skill_injected events)
 - status: open
@@ -291,7 +294,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-04, P1-05
-- dod: `pnpm --filter @furbysoup/graft-trust test` exits 0. Tests must cover: an injected skill emits `{episode_id, skill_id, version, section_ids}` and lands in `injections`; a probation skill carries the banner; a retired skill is never injected.
+- dod: tests named `injection emits skill_injected into injections` (an injected skill emits `{episode_id, skill_id, version, section_ids}` and lands in `injections`), `injection gives probation skills the banner` and `injection never injects a retired skill` pass.
+- dod-cmd: ops/automation/require-tests.sh "injection emits skill_injected into injections" "injection gives probation skills the banner" "injection never injects a retired skill"
 
 ### P1-07 · graft-trust: skills-off bypass flag (record-only, default off)
 - status: open
@@ -299,7 +303,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-06
-- dod: `pnpm --filter @furbysoup/graft-trust exec vitest run -t "bypass"` passes. Tests must show: with the flag on, zero `injections` rows and `episodes.skills_enabled = 0`; with the flag's default, nothing is bypassed. The ablation fraction itself is not wired until P3.
+- dod: tests named `bypass on records no injections and skills_enabled 0` and `bypass default bypasses nothing` pass. The ablation fraction itself is not wired until P3.
+- dod-cmd: ops/automation/require-tests.sh "bypass on records no injections and skills_enabled 0" "bypass default bypasses nothing"
 
 ### P1-08 · graft-judge: tier-1 deterministic checker registry + kata test-runner checker
 - status: open
@@ -307,7 +312,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-04
-- dod: `pnpm --filter @furbysoup/graft-judge exec vitest run -t "tier-1"` passes. Tests must cover pass, fail and not-applicable for the kata checker. A `verdicts` row must be written with `tier = 1`.
+- dod: tests named `tier-1 kata checker pass`, `tier-1 kata checker fail`, `tier-1 kata checker not-applicable` and `tier-1 writes a verdicts row with tier 1` pass.
+- dod-cmd: ops/automation/require-tests.sh "tier-1 kata checker pass" "tier-1 kata checker fail" "tier-1 kata checker not-applicable" "tier-1 writes a verdicts row with tier 1"
 
 ### P1-09 · graft-judge: tier-2 judge call, record-only, logprob captured
 - status: open
@@ -323,7 +329,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-06, P1-09
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "blame"` passes. Tests must cover: `quote_validated = 1` only when the quote is found in the trace AND the section was injected in that episode; each failure mode is tested separately.
+- dod: tests named `blame validated when quote is in trace and section was injected`, `blame rejected when quote is not in trace` and `blame rejected when section was not injected` pass; `quote_validated = 1` only in the first case.
+- dod-cmd: ops/automation/require-tests.sh "blame validated when quote is in trace and section was injected" "blame rejected when quote is not in trace" "blame rejected when section was not injected"
 
 ### P1-11 · ADR: kata generator — template-based vs LLM-generated with frozen tests
 - status: open
@@ -340,6 +347,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P1-11
 - dod: `ops/scripts/gen-kata --seed 1 --out <a>` and `--seed 1 --out <b>` produce trees with identical `sha256sum`. `ops/scripts/tests/test-gen-kata.sh` exits 0. That test must show: the reference solution passes the hidden tests, a stub fails them, and the hidden tests are absent from the doer-visible task dir.
+- dod-cmd: d=$(mktemp -d) && ops/scripts/gen-kata --seed 1 --out "$d/a" && ops/scripts/gen-kata --seed 1 --out "$d/b" && diff <(cd "$d/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) <(cd "$d/b" && find . -type f -print0 | sort -z | xargs -0 sha256sum) && ops/scripts/tests/test-gen-kata.sh
 
 ### P1-13 · Seed skill 1 (kata-facing), authored fresh
 - status: open
@@ -395,7 +403,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-03
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "audit sample"` passes. Tests must cover: the same seed selects the same verdicts; outcomes are appended with `source = 'human'` and never update existing rows.
+- dod: tests named `audit sample same seed selects same verdicts` and `audit sample appends human outcomes without updating rows` (outcomes carry `source = 'human'`) pass.
+- dod-cmd: ops/automation/require-tests.sh "audit sample same seed selects same verdicts" "audit sample appends human outcomes without updating rows"
 
 ### P1-20 · Human audit of 10 random verdicts
 - status: open
@@ -419,6 +428,7 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-21
+- note: no `dod-cmd` yet — the worker skips this item until P1-21's ADR names the regen entry point and the ADR session adds one.
 - dod: the regen entry point under `ops/scripts/` named in the ADR exits 0. Two consecutive runs produce byte-identical output (`sha256sum`). A test shows the inputs are opened read-only and no network is used. A test asserts that the output contains all six SPEC §3.8 v0 elements: indicator board, merge annotations, per-skill drilldown, calibration panel, ablation gap and revert log. Empty-state rendering is allowed where no data exists yet.
 
 ### P1-23 · Phase 1 close-out
