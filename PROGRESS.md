@@ -79,3 +79,28 @@ red check, or a deviation from SPEC.
 - deviations: backlog is BACKLOG.md, not GitHub Issues · reviewer verdict is a PR comment, not a formal review (same account), and required approvals = 0 (the human gate is the merge click) · branch protection enforced for admins because the worker pushes as the owner account · hard exclusions extended to the automation's own guardrails (ops/automation, .claude, .github, root test/lint/TS configs, BACKLOG.md) · worker items require a machine-runnable `dod-cmd` · runs execute in git worktrees · added a project-wide pause (not in SPEC) · auth preflight + infra-error handling (not in SPEC).
 - Next action: Mark sets `current-phase: 1` in BACKLOG.md when ready; then an interactive session works R-01 → R-02 → R-03 → R-04 (all owner-only: dsh config, model pins, judge ADR) before any Phase 1 worker items run.
 - Blockers: none for the P0.5 gate. For Phase 1: R-01 (doer has <2K working context) and R-03 (judge confidence derivation) must land first.
+
+## 2026-09-26 · Session 3: Phase 1 readiness · Phase 0.5 → 1
+**Answer:** R-01, R-02 and R-04 are done and verified. **R-03 is not: the phi4-mini judge is at chance on kata code correctness (AUROC 0.44–0.56) under all five `raw_conf` derivations, so ADR-0002 is only *Proposed* and awaits Mark.** Phase 1 worker items now have `dod-cmd`s. `current-phase` is unchanged.
+- Bad news first:
+  - **The judge can't discriminate.** On 24 labelled items, phi4-mini says `pass` on 10/12 incorrect candidates. Its analyse-first mode flips to rejecting 7/12 correct ones. No derivation fixes that; R-08 re-opens the judge model before P3 (ADR-0002).
+  - **Every dsh request so far ran at temperature 1.0 / top_p 1.0.** Ollama's `/v1` applies OpenAI defaults when pi-ai sends none, and dsh 0.1.5-rc.3 cannot set sampling. This affects every episode until R-06 lands.
+  - **Phase 0's context problem was worse than measured.** Besides the 6K prompt, pi-ai's hard-coded 4096-token reserve capped doer output at **1 token** per request. That, not the prompt alone, drove the 7 compactions.
+  - **Thinking-off is unusable on this stack.** With tools present, non-thinking output never reaches `/v1` (`EMPTY_RESPONSE`, 3/3).
+- Changed (branch `session/p1-readiness`):
+  - R-02: `graft-judge:cpu` / `graft-embed:cpu` Modelfiles with `num_gpu 0`; `size_vram` 0 for both.
+  - R-01: 19 dsh-base rows disabled (23 → 6 tools). First request 6,004 → 2,043 tokens on the toy task, 2,211 on the kata. `contextWindow: 11264` plus compaction `thresholdRatio: 0.5` work around the pi-ai reserve.
+  - R-04: thinking on, sent explicitly as `reasoning_effort: "high"`. k=3 on/off table in `ops/VERSIONS.md`.
+  - R-03: dataset, `eval.py` and `results.json` under `ops/experiments/judge-confidence/`; `docs/decisions/0002-judge-confidence.md` (Proposed).
+  - Backlog: `dod-cmd`s for P1-03/04/05/06/07/08/10/12/19, with exact test names in their `dod`s, and a new `ops/automation/require-tests.sh`. P1-22 waits for its ADR. New items R-06 (sampling), R-07 (tool quirks), R-08 (stronger judge). ADR globs changed to `docs/decisions/*-…`, matching the repo's `NNNN-` naming.
+  - `CLAUDE.md` Current state refreshed (it still said "next is Phase 0.5").
+- Exit criteria (SPEC §8, P1): not evaluated. This session covers readiness items only.
+  - [x] R-01: Ollama `task.n_tokens` 2,043 (toy) / 2,211 (kata) ≤ 4096 on the first request; rows and before/after recorded in `ops/VERSIONS.md`.
+  - [x] R-02: `/api/ps` shows `size_vram` 0 for `graft-judge:cpu` and `graft-embed:cpu`; digests recorded.
+  - [ ] R-03: the ADR has a ≥20-item results table but is `Proposed`, with no method validated.
+  - [x] R-04: k=3 on/off comparison recorded; the profile enforces `reasoning_effort: high` (verified on the wire).
+- Next action:
+  - Mark reviews the readiness PR and accepts or amends ADR-0002.
+  - Mark decides `current-phase: 1`. The first worker-eligible items would be P1-03 and P1-05.
+  - R-05 (Windows Task Scheduler) remains Mark's.
+- Blockers: none for starting Phase 1 worker items. R-03 blocks only P1-09's claim of a meaningful `raw_conf`, not its record-only plumbing.

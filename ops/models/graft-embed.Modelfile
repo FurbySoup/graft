@@ -1,0 +1,7 @@
+# Graft embeddings — qwen3-embedding:0.6b pinned to CPU/RAM. Observed 2026-09-25:
+# the stock tag loads 2.2 GiB fully into VRAM by default, contending with the doer.
+# num_gpu 0 offloads zero layers. Recreate with:
+#   ollama create graft-embed:cpu -f ops/models/graft-embed.Modelfile
+# Base digest is pinned in ops/VERSIONS.md; the FROM tag must resolve to it.
+FROM qwen3-embedding:0.6b
+PARAMETER num_gpu 0

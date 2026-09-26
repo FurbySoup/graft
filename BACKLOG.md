@@ -201,7 +201,7 @@ commit and marks the item `blocked`.
 ## Phase 1 — Observation mode (SPEC §8 P1). No gating, no skill edits.
 
 ### R-01 · Doer context budget: free ≥4K tokens of working context
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -210,7 +210,7 @@ commit and marks the item `blocked`.
 - dod: Ollama's log for a `graft` profile headless run shows `task.n_tokens` ≤ 4096 for the first request AND `ops/VERSIONS.md` records the rows changed and the measured before/after prompt size.
 
 ### R-02 · Pin judge and embeddings to CPU with committed Modelfiles
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -220,15 +220,16 @@ commit and marks the item `blocked`.
 
 ### R-03 · ADR: how tier-2 judge confidence (`raw_conf`) is derived
 - status: open
+- progress: 2026-09-26 — `docs/decisions/0002-judge-confidence.md` is **Proposed** with the ≥20-item results table; no method is chosen because the judge is at chance (AUROC 0.44–0.56) under every derivation. Awaiting Mark: accept/amend.
 - phase: 1
 - executor: session
 - owner-only: yes
 - depends: R-02
 - note: Ollama logprobs are pre-grammar-mask: in the Phase 0 smoke the sampled in-schema verdict token had p≈0.0001 while the model's top token was `incorrect`. Compare ≥2 derivations (e.g. per-option likelihood scoring; reasoning-before-verdict field order) on a small hand-labelled set.
-- dod: `docs/decisions/ADR-*-judge-confidence.md` with `Status: Accepted`, a results table over ≥20 labelled artifacts per candidate method, and the chosen method named.
+- dod: `docs/decisions/*-judge-confidence.md` with `Status: Accepted`, a results table over ≥20 labelled artifacts per candidate method, and the chosen method named.
 
 ### R-04 · Pin the doer's thinking-mode setting
-- status: open
+- status: done
 - phase: 1
 - executor: session
 - owner-only: yes
@@ -244,6 +245,33 @@ commit and marks the item `blocked`.
 - depends: —
 - note: cron lives inside WSL; if WSL has shut down (no attached terminal) or the PC sleeps, nightly runs silently don't happen. Candidate: a Windows Task Scheduler task that launches the worker through `wsl.exe` (keeping WSL up for the run) with "wake to run" enabled.
 - dod: with every WSL window closed at 23:00, the next morning `data/automation/runs.log` has worker entries between 00:00 and 01:00 local time.
+
+### R-06 · Pin the doer's sampling parameters (temperature / top_p)
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-04
+- note: observed 2026-09-26 in Ollama's sampler log: every dsh request runs at `temp = 1.000, top_p = 1.000`. pi-ai sends no temperature, Ollama's OpenAI-compatible `/v1` then applies OpenAI defaults (overriding the Modelfile's 0.6/0.95), and dsh 0.1.5-rc.3 exposes no sampling config (dsh-llm-pi-ai has no `samplingParams` field; the agent loop has no temperature). Options to evaluate: an upstream/config path in a newer dsh; a Modelfile-level override that survives `/v1`; a localhost shim (least preferred — another moving part in the evidence chain). Until fixed, every episode samples at T=1.0 — record it in each experiment.
+- dod: Ollama's sampler log for a `graft` profile headless run shows the chosen temperature/top_p, AND `ops/VERSIONS.md` records the values, the mechanism, and why they were chosen.
+
+### R-07 · Doer tool-surface quirks observed after the R-01 trim
+- status: open
+- phase: 1
+- executor: session
+- owner-only: yes
+- depends: R-01
+- note: observed 2026-09-26 on toy and kata runs. (1) The doer's first `write` call often passes `sandbox_permissions` + `justification` (escalation fields on the `write`/`bash` schemas); headless has no approval answerer, so it fails closed and the doer retries without them — one wasted turn per episode, and a confound for turn/token metrics. (2) With `tool-jobs` disabled, the `bash` schema still advertises `run_in_background` ("collect with job_output") — a dangling reference. Investigate profile-level fixes (e.g. approval policy for headless, bash background option) without widening the sandbox.
+- dod: on the R-04 kata task, k=3 `graft` runs show no `sandbox_permissions` argument in any tool call AND no tool schema mentions `job_output`; `ops/VERSIONS.md` records the rows changed.
+
+### R-08 · Evaluate a stronger CPU-resident, non-Qwen judge
+- status: open
+- phase: pre-P3
+- executor: session
+- owner-only: yes
+- depends: R-03
+- note: ADR-0002 (proposed): phi4-mini scored AUROC 0.44–0.56 (chance) on the 24-item judge-confidence set under all five `raw_conf` derivations. Re-run `ops/experiments/judge-confidence/eval.py --model <candidate>` for ≥1 larger decorrelated (non-Qwen) model that fits CPU/RAM, plus judged-domain data once D-01 exists. Models are pulled serially; record digests in `ops/VERSIONS.md`.
+- dod: an ADR records the judge model for P3 with an AUROC table over ≥2 models on the same dataset, `Status: Accepted`.
 
 ### P1-01 · Request Mark's approval for PyPI as a network target; pin sidecar deps
 - status: open
@@ -267,7 +295,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: —
-- dod: `ops/scripts/ledger-sql "SELECT 1 AS x"` prints `[{"x":1}]`. AND a test shows `ops/scripts/ledger-sql "INSERT INTO episodes DEFAULT VALUES"` exits non-zero, because the DB is opened read-only.
+- dod: `ops/scripts/ledger-sql --db <migrated.sqlite> "SELECT 1 AS x"` prints `[{"x":1}]` (default `--db` is `data/ledger.sqlite`). Tests named `ledger-sql prints rows as JSON` and `ledger-sql rejects writes` (the latter runs `INSERT INTO episodes DEFAULT VALUES` and asserts a non-zero exit, because the DB is opened read-only) pass.
+- dod-cmd: test -x ops/scripts/ledger-sql && ops/automation/require-tests.sh "ledger-sql prints rows as JSON" "ledger-sql rejects writes"
 
 ### P1-04 · graft-ledger: project a dsh session stream into SQLite
 - status: open
@@ -276,6 +305,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P1-02
 - dod: `pnpm --filter @furbysoup/graft-ledger test` exits 0. Tests must be named `projects fixture session into episodes` and `re-projecting the same session adds no rows`. The dsh format parsing lives in the plugin; the row mapping lives in `packages/core`. `grep -rl "dsh\|cordis" packages/core/src` returns nothing.
+- dod-cmd: ops/automation/require-tests.sh "projects fixture session into episodes" "re-projecting the same session adds no rows" && ! grep -rlE "dsh|cordis" packages/core/src
 
 ### P1-05 · graft-trust: registry.yaml reader (read-only)
 - status: open
@@ -283,7 +313,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: —
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "registry"` passes. Tests must cover: parsing a fixture registry; rejecting an unknown `state`; and `grep -rnE 'writeFile|appendFile' packages/core/src/registry` returning nothing. Fixtures live under `packages/core`, never `skills/`.
+- dod: tests named `registry parses a fixture registry` and `registry rejects an unknown state` pass; fixtures live under `packages/core`, never `skills/`; `grep -rnE 'writeFile|appendFile' packages/core/src/registry` returns nothing.
+- dod-cmd: ops/automation/require-tests.sh "registry parses a fixture registry" "registry rejects an unknown state" && test -d packages/core/src/registry && ! grep -rnE "writeFile|appendFile" packages/core/src/registry
 
 ### P1-06 · graft-trust: injection logging (skill_injected events)
 - status: open
@@ -291,7 +322,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-04, P1-05
-- dod: `pnpm --filter @furbysoup/graft-trust test` exits 0. Tests must cover: an injected skill emits `{episode_id, skill_id, version, section_ids}` and lands in `injections`; a probation skill carries the banner; a retired skill is never injected.
+- dod: tests named `injection emits skill_injected into injections` (an injected skill emits `{episode_id, skill_id, version, section_ids}` and lands in `injections`), `injection gives probation skills the banner` and `injection never injects a retired skill` pass.
+- dod-cmd: ops/automation/require-tests.sh "injection emits skill_injected into injections" "injection gives probation skills the banner" "injection never injects a retired skill"
 
 ### P1-07 · graft-trust: skills-off bypass flag (record-only, default off)
 - status: open
@@ -299,7 +331,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-06
-- dod: `pnpm --filter @furbysoup/graft-trust exec vitest run -t "bypass"` passes. Tests must show: with the flag on, zero `injections` rows and `episodes.skills_enabled = 0`; with the flag's default, nothing is bypassed. The ablation fraction itself is not wired until P3.
+- dod: tests named `bypass on records no injections and skills_enabled 0` and `bypass default bypasses nothing` pass. The ablation fraction itself is not wired until P3.
+- dod-cmd: ops/automation/require-tests.sh "bypass on records no injections and skills_enabled 0" "bypass default bypasses nothing"
 
 ### P1-08 · graft-judge: tier-1 deterministic checker registry + kata test-runner checker
 - status: open
@@ -307,7 +340,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-04
-- dod: `pnpm --filter @furbysoup/graft-judge exec vitest run -t "tier-1"` passes. Tests must cover pass, fail and not-applicable for the kata checker. A `verdicts` row must be written with `tier = 1`.
+- dod: tests named `tier-1 kata checker pass`, `tier-1 kata checker fail`, `tier-1 kata checker not-applicable` and `tier-1 writes a verdicts row with tier 1` pass.
+- dod-cmd: ops/automation/require-tests.sh "tier-1 kata checker pass" "tier-1 kata checker fail" "tier-1 kata checker not-applicable" "tier-1 writes a verdicts row with tier 1"
 
 ### P1-09 · graft-judge: tier-2 judge call, record-only, logprob captured
 - status: open
@@ -323,7 +357,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-06, P1-09
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "blame"` passes. Tests must cover: `quote_validated = 1` only when the quote is found in the trace AND the section was injected in that episode; each failure mode is tested separately.
+- dod: tests named `blame validated when quote is in trace and section was injected`, `blame rejected when quote is not in trace` and `blame rejected when section was not injected` pass; `quote_validated = 1` only in the first case.
+- dod-cmd: ops/automation/require-tests.sh "blame validated when quote is in trace and section was injected" "blame rejected when quote is not in trace" "blame rejected when section was not injected"
 
 ### P1-11 · ADR: kata generator — template-based vs LLM-generated with frozen tests
 - status: open
@@ -331,7 +366,7 @@ commit and marks the item `blocked`.
 - executor: session
 - owner-only: yes
 - depends: —
-- dod: `docs/decisions/ADR-*-kata-generator.md` exists AND contains `## Decision`, `## Alternatives` and the word `leakage`, i.e. the SPEC §11 risk that the doer's own model family writes the tests.
+- dod: `docs/decisions/*-kata-generator.md` exists AND contains `## Decision`, `## Alternatives` and the word `leakage`, i.e. the SPEC §11 risk that the doer's own model family writes the tests.
 
 ### P1-12 · Kata generator ops/scripts/gen-kata (per ADR)
 - status: open
@@ -340,6 +375,7 @@ commit and marks the item `blocked`.
 - owner-only: no
 - depends: P1-11
 - dod: `ops/scripts/gen-kata --seed 1 --out <a>` and `--seed 1 --out <b>` produce trees with identical `sha256sum`. `ops/scripts/tests/test-gen-kata.sh` exits 0. That test must show: the reference solution passes the hidden tests, a stub fails them, and the hidden tests are absent from the doer-visible task dir.
+- dod-cmd: d=$(mktemp -d) && ops/scripts/gen-kata --seed 1 --out "$d/a" && ops/scripts/gen-kata --seed 1 --out "$d/b" && diff <(cd "$d/a" && find . -type f -print0 | sort -z | xargs -0 sha256sum) <(cd "$d/b" && find . -type f -print0 | sort -z | xargs -0 sha256sum) && ops/scripts/tests/test-gen-kata.sh
 
 ### P1-13 · Seed skill 1 (kata-facing), authored fresh
 - status: open
@@ -395,7 +431,8 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-03
-- dod: `pnpm --filter @furbysoup/graft-core exec vitest run -t "audit sample"` passes. Tests must cover: the same seed selects the same verdicts; outcomes are appended with `source = 'human'` and never update existing rows.
+- dod: tests named `audit sample same seed selects same verdicts` and `audit sample appends human outcomes without updating rows` (outcomes carry `source = 'human'`) pass.
+- dod-cmd: ops/automation/require-tests.sh "audit sample same seed selects same verdicts" "audit sample appends human outcomes without updating rows"
 
 ### P1-20 · Human audit of 10 random verdicts
 - status: open
@@ -411,7 +448,7 @@ commit and marks the item `blocked`.
 - executor: session
 - owner-only: yes
 - depends: P1-18
-- dod: `docs/decisions/ADR-*-tracker-form.md` exists. It must contain `## Decision`, `## Alternatives` (at least 2 considered), a section confirming it is read-only, offline and deterministic, and a reference to the ledger data it was decided on (episode count or IDs). The item must not assume any technology beforehand (CLAUDE.md principle 7).
+- dod: `docs/decisions/*-tracker-form.md` exists. It must contain `## Decision`, `## Alternatives` (at least 2 considered), a section confirming it is read-only, offline and deterministic, and a reference to the ledger data it was decided on (episode count or IDs). The item must not assume any technology beforehand (CLAUDE.md principle 7).
 
 ### P1-22 · Tracker v0 (graft-dash) per the ADR
 - status: open
@@ -419,6 +456,7 @@ commit and marks the item `blocked`.
 - executor: worker
 - owner-only: no
 - depends: P1-21
+- note: no `dod-cmd` yet — the worker skips this item until P1-21's ADR names the regen entry point and the ADR session adds one.
 - dod: the regen entry point under `ops/scripts/` named in the ADR exits 0. Two consecutive runs produce byte-identical output (`sha256sum`). A test shows the inputs are opened read-only and no network is used. A test asserts that the output contains all six SPEC §3.8 v0 elements: indicator board, merge annotations, per-skill drilldown, calibration panel, ablation gap and revert log. Empty-state rendering is allowed where no data exists yet.
 
 ### P1-23 · Phase 1 close-out
@@ -441,7 +479,7 @@ commit and marks the item `blocked`.
 - depends: —
 - trigger: before any backlog item, canary, skill or episode fixture draws on Mark's personal productivity work (including if D-01 picks such a second domain) — whichever comes first
 - note: the repo went public 2026-09-25 (Phase 0.5) so branch protection works on the Free plan. That was chosen while all content is synthetic katas and project docs. Personal task content, ledger exports or episode fixtures change that trade-off.
-- dod: `docs/decisions/ADR-*-repo-visibility.md` exists with `Status: Accepted`, and it records the decision (stay public / go private / split private data repo) with the branch-protection consequence stated. AND `gh repo view FurbySoup/graft --json visibility --jq .visibility` matches the ADR.
+- dod: `docs/decisions/*-repo-visibility.md` exists with `Status: Accepted`, and it records the decision (stay public / go private / split private data repo) with the branch-protection consequence stated. AND `gh repo view FurbySoup/graft --json visibility --jq .visibility` matches the ADR.
 
 ### D-01 · Choose the second (judge) domain
 - status: open
@@ -449,4 +487,4 @@ commit and marks the item `blocked`.
 - executor: human
 - owner-only: yes
 - depends: P1-23
-- dod: `docs/decisions/ADR-*-second-domain.md` exists with `Status: Accepted`. It must contain a scoring table that rates at least 2 candidates against all five SPEC §7 criteria (deterministic verifiability, instance volume, difficulty gradient, value to Mark, offline safety), with evidence cited per score. It must be merged before any P3 item is opened.
+- dod: `docs/decisions/*-second-domain.md` exists with `Status: Accepted`. It must contain a scoring table that rates at least 2 candidates against all five SPEC §7 criteria (deterministic verifiability, instance volume, difficulty gradient, value to Mark, offline safety), with evidence cited per score. It must be merged before any P3 item is opened.

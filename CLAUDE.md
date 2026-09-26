@@ -12,21 +12,37 @@ single desktop (RTX 4060 Ti 8GB / 64GB RAM / WSL2 Ubuntu).
 
 ## Current state — read before acting
 
-**Phase 0 is complete (2026-09-25); next is Phase 0.5** (`SESSION-2-PROMPT.md`), once
-Mark confirms the P0 exit checklist in `PROGRESS.md`. Nothing from Phase 0.5 or 1 exists.
+**Phases 0 and 0.5 are complete (2026-09-25). The Phase 1 readiness items (`R-*` in
+`BACKLOG.md`) are in progress. `current-phase` stays 0.5 until Mark sets it to 1.**
 
-- **Built:** git repo; pnpm workspace (`packages/core` ledger schema + append-only
-  SQLite migration; `packages/plugins/graft-{trust,judge,ledger}` Cordis stubs that only
-  log mount/unmount, mounted nowhere); `sidecars/calibrate` stdlib-only stubs; dsh
-  0.1.5-rc.3 pinned with profiles `graft` and frozen `graft-replay`; Ollama models pulled
-  and smoke-tested; `ops/stats.yaml` pre-registered; `BACKLOG.md`, `PROGRESS.md`,
-  ADR-0001, `docs/prior-art-skill-tree.md`.
+- **Built:**
+  - git repo on GitHub (`FurbySoup/graft`, public, branch-protected, CI `gate` check).
+  - pnpm workspace:
+    - `packages/core`: ledger schema, append-only SQLite migration, config loader.
+    - `packages/plugins/graft-{trust,judge,ledger}`: Cordis stubs, mounted nowhere.
+  - `sidecars/calibrate`: stdlib-only stubs.
+  - dsh 0.1.5-rc.3 pinned, with profiles `graft` and frozen `graft-replay`.
+  - Ollama models pinned via committed Modelfiles.
+  - `ops/stats.yaml` pre-registered.
+  - The Phase 0.5 dev loop in `ops/automation/` (cron worker → PR, review pass, hooks,
+    pause/resume via `ops/scripts/graft`).
+  - ADR-0001; ADR-0002 (judge confidence, **Proposed**); `docs/prior-art-skill-tree.md`.
 - **Read `ops/VERSIONS.md` before touching dsh or models.** It records every pin and
-  every place dsh diverges from SPEC — above all: dsh has **profiles, not presets**; the
-  doer is **`graft-doer:8k` (qwen3:8b), not qwen3.5:9b**; the doer's context is **8192
-  tokens**, of which dsh's fixed prompt uses ~6K.
-- **Absent until later phases:** `ops/automation/`, `skills/registry.yaml`, any skills
-  or canaries, `ops/scripts/gen-kata`, the tracker, `gh` in WSL, a GitHub remote.
+  every place dsh diverges from SPEC. The most important:
+  - dsh has **profiles, not presets**.
+  - The doer is **`graft-doer:8k` (qwen3:8b), not qwen3.5:9b**, with 8192 real
+    context tokens. The `graft` profile's first request uses ~2.0–2.2K (R-01: trimmed to
+    6 tools). The pi-ai route **declares 11264 on purpose**, because pi-ai reserves a
+    fixed 4096; do not "correct" it to 8192.
+  - Doer thinking is **on**, sent explicitly (R-04: off returns empty responses).
+  - The doer samples at T=1.0 because dsh cannot set it (R-06, open).
+  - Judge and embeddings are **`graft-judge:cpu` / `graft-embed:cpu`**, never the base
+    tags.
+- **Judge finding (ADR-0002, proposed):** phi4-mini is at chance on kata code
+  correctness under every `raw_conf` derivation tried. Treat tier-2 as record-only
+  plumbing; nothing gates on it (R-08 re-opens the judge model before P3).
+- **Absent until later phases:** `skills/registry.yaml`, any skills or canaries,
+  `ops/scripts/gen-kata`, `ops/scripts/ledger-sql`, the tracker.
 - `SPEC.md` and `RISK-REGISTER.md` live in `docs/`.
 
 ## Core principles — enforce these in every change
@@ -136,8 +152,9 @@ graft/
     (`ops/models/graft-doer.Modelfile`) — GPU. SPEC §5's `qwen3.5:9b` was rejected:
     vision-bundled and spills 12% to CPU (evidence in `ops/VERSIONS.md`). One model
     resident in VRAM at a time.
-  - Judge: `phi4-mini` — CPU/RAM (decorrelated family; do not swap to a Qwen judge).
-  - Embeddings: `qwen3-embedding:0.6b` — CPU.
+  - Judge: `graft-judge:cpu` = `phi4-mini` + `num_gpu 0` (`ops/models/graft-judge.Modelfile`) —
+    CPU/RAM (decorrelated family; do not swap to a Qwen judge).
+  - Embeddings: `graft-embed:cpu` = `qwen3-embedding:0.6b` + `num_gpu 0` — CPU.
   - Consolidator: Claude (this tool), offline sessions only.
 - TypeScript throughout `packages/`: **strict mode, no `any`** — enforced by
   `tsconfig.base.json` + `pnpm lint` (the strict-typescript-mode skill is not installed
@@ -255,7 +272,7 @@ Legitimate uses, all read-only:
 - **Pitfalls already paid for**: qwen thinking-mode field quirks, UTF-8 BOM in
   PowerShell-written JSON, Qdrant embedded single-client limit, context overhead
   budget (the "~37%" figure is unconfirmed — see `docs/prior-art-skill-tree.md` §4;
-  Graft measures its own: dsh uses ~6K of the doer's 8K context).
+  Graft measures its own: dsh used ~6K of the doer's 8K context before R-01, ~2K after).
 - **Concepts worth re-deriving from scratch** — e.g. guard patterns
   (InputGuard/OutputGuard/PermissionGuard) as inspiration for judge tier-1 checks.
 

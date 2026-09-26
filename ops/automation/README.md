@@ -9,6 +9,8 @@ review pass comments on it; Mark merges. Nothing here ever merges or pushes to `
 | `review.sh` | For each open `auto/*` PR whose head has no graft review: fresh-context, read-only headless review → PR comment with `Verdict: looks-good` / `request-changes` |
 | `task-prompt.md` / `review-prompt.md` | Prompt templates (worker / reviewer) |
 | `gate.sh` | The single definition of green: typecheck, lint, TS tests, Python tests |
+| `dod.sh` | Runs the claimed item's `dod-cmd` (`$GRAFT_DOD_CMD`) — the headless session's one-word self-check |
+| `require-tests.sh` | `require-tests.sh "<name>" …` — green only if no TS test failed and each named test exists and passed; used by backlog `dod-cmd`s (a bare `vitest -t` filter that matches nothing proves nothing) |
 | `exclusions.txt` | Hard-exclusion paths (SPEC §9 + the automation's own guardrails) |
 | `lib.sh` | Shared functions (backlog parsing, exclusions, logging, timeouts) |
 | `install-hooks.sh`, `githooks/`, `hooks/` | Commit gating (see Hooks) |
